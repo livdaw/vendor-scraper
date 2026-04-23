@@ -71,6 +71,9 @@ tr.new-row td{animation:flashIn 1.5s ease-out}
       <strong style="color:#a855f7">&#x26A1; One-click mode:</strong> Drag <a id="runBookmarklet" href="#" class="btn btn-sm" style="background:#a855f7;color:#fff;cursor:grab;text-decoration:none;padding:3px 10px;font-size:11px;display:inline-block" draggable="true">&#x1F680; Scrape Page</a> to your bookmarks bar. Then just click it on any vendor category page &mdash; it auto-scrapes and copies results to clipboard. No console needed.
     </div>
     <div style="margin-top:8px;padding:8px 12px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--dim)">
+      <strong style="color:var(--orange)">&#x1F4CC; Single product:</strong> Drag <a id="grabBookmarklet" href="#" class="btn btn-sm" style="background:var(--orange);color:#fff;cursor:grab;text-decoration:none;padding:3px 10px;font-size:11px;display:inline-block" draggable="true">&#x1F4CC; Grab Product</a> to your bookmarks bar. Click it on any single product page to extract &amp; copy that one item. Ctrl+V here to add it.
+    </div>
+    <div style="margin-top:8px;padding:8px 12px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--dim)">
       <strong>Tip:</strong> For multiple categories, generate &amp; paste a script per tab. Each tab's scraper runs independently. Use <strong>📋 Copy Products</strong> in each tab when done, then Ctrl+V here between each.
     </div>
 
@@ -1567,9 +1570,54 @@ function buildRunBookmarklet(){
   return code;
 }
 
+function buildGrabBookmarklet(){
+  // Self-contained single-product extractor - works on any product page
+  var code='javascript:void(function(){'+
+    'try{'+
+      'var t=document.querySelector(".product_title,h1.entry-title,.productView-title,h1[itemprop=name],.product-title,h1");'+
+      'var title=t?(t.textContent||"").trim():"";'+
+      'if(!title){alert("Could not find product title on this page.");return;}'+
+      // Price
+      'var pe=document.querySelector(".price .amount,.woocommerce-Price-amount,.product-price ins .amount,[class*=price] .amount,.price");'+
+      'var price=0;'+
+      'if(pe){var pm=(pe.textContent||"").replace(/[^0-9.]/g,"");price=parseFloat(pm)||0;}'+
+      // Description
+      'var de=document.querySelector(".woocommerce-product-details__short-description,#tab-description .woocommerce-Tabs-panel--description,.product-description,[itemprop=description],.woocommerce-Tabs-panel--description,#tab-description");'+
+      'var desc=de?(de.textContent||"").trim().substring(0,500):"";'+
+      // SKU
+      'var se=document.querySelector(".sku,[class*=sku]");'+
+      'var sku=se?(se.textContent||"").trim():"";'+
+      // Images
+      'var imgs=[];var seen={};'+
+      'document.querySelectorAll(".woocommerce-product-gallery img,.product-gallery img,.wp-post-image,figure img,[class*=product] img").forEach(function(el){'+
+        'var src=el.getAttribute("data-large_image")||el.getAttribute("data-src")||el.src;'+
+        'if(src&&!seen[src]&&src.indexOf("placeholder")<0&&src.indexOf("data:image")<0){'+
+          'var dm=src.match(/-(\\\\d+)x(\\\\d+)\\\\./);'+
+          'if(dm&&parseInt(dm[1])<200)return;'+
+          'seen[src]=1;imgs.push(src);'+
+        '}'+
+      '});'+
+      // Quantity
+      'var qe=document.querySelector(".stock,p.stock,[class*=stock]");'+
+      'var qty=1;if(qe){var qm=(qe.textContent||"").match(/(\\\\d+)/);if(qm)qty=parseInt(qm[1]);}'+
+      // Vendor category from breadcrumb
+      'var bc=document.querySelector(".woocommerce-breadcrumb,.breadcrumb,.breadcrumbs");'+
+      'var vcat=bc?(bc.textContent||"").trim():"";'+
+      // Build product object
+      'var p={title:title,description:desc,price:price,url:location.href,images:imgs,thumbnail:imgs[0]||"",sku:sku,weight:"",dimensions:{},tags:[],variants:[{title:"Default",sku:sku,price:price}],quantity:qty,vendorCategory:vcat};'+
+      'var j=JSON.stringify([p]);'+
+      'navigator.clipboard.writeText(j).then(function(){'+
+        'alert("\\u2714 Grabbed: "+title+"\\n\\u00a3"+price.toFixed(2)+" | "+imgs.length+" images\\n\\nPaste into Scraper Tool with Ctrl+V");'+
+      '}).catch(function(){prompt("Copy this JSON:",j);});'+
+    '}catch(e){alert("Error: "+e.message);}'+
+  '}())';
+  return code;
+}
+
 // Set bookmarklet hrefs
 try{document.getElementById('bookmarklet').href=buildCopyBookmarklet();}catch(e){}
 try{document.getElementById('runBookmarklet').href=buildRunBookmarklet();}catch(e){}
+try{document.getElementById('grabBookmarklet').href=buildGrabBookmarklet();}catch(e){}
 
 // ── Tab title with count ──
 function updateTitle(){
