@@ -96,6 +96,7 @@ tr.new-row td{animation:flashIn 1.5s ease-out}
       <div class="tbl-acts">
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);cursor:pointer"><input type="checkbox" id="skipSold" checked> Skip sold in export</label>
         <button class="btn btn-sm" onclick="aiRewrite()" id="aiBtn" disabled style="border-color:rgba(168,85,247,0.4);color:#a855f7">&#x2728; AI Rewrite</button>
+        <button class="btn btn-sm" onclick="showApiKeyInput()" id="aiKeyBtn" style="border-color:rgba(168,85,247,0.2);color:var(--dim);font-size:11px">&#x1F511;</button>
         <button class="btn btn-danger btn-sm" onclick="clearAll()" id="clrBtn" disabled>Clear All</button>
         <button class="btn btn-primary" onclick="exportCSV()" id="expBtn" disabled>Export Medusa CSV</button>
       </div>
@@ -1390,8 +1391,32 @@ function basicCleanup(p){
   return p;
 }
 
+// ── AI API Key management ──
+function showApiKeyInput(){
+  var current=localStorage.getItem('anthropic_api_key')||'';
+  var key=prompt('Enter your Anthropic API key (starts with sk-ant-):\n\nThis is stored locally in your browser and never sent anywhere except the Anthropic API.\n\nLeave blank to clear.',current);
+  if(key===null)return; // cancelled
+  if(key.trim()){
+    localStorage.setItem('anthropic_api_key',key.trim());
+    toast('API key saved!');
+    document.getElementById('aiKeyBtn').style.color='#a855f7';
+  }else{
+    localStorage.removeItem('anthropic_api_key');
+    toast('API key cleared');
+    document.getElementById('aiKeyBtn').style.color='var(--dim)';
+  }
+}
+// Indicate if key is set
+try{if(localStorage.getItem('anthropic_api_key'))document.getElementById('aiKeyBtn').style.color='#a855f7';}catch(e){}
+
 // ── AI Rewrite (calls Claude API) ──
 async function aiRewrite(){
+  var apiKey=localStorage.getItem('anthropic_api_key');
+  if(!apiKey){
+    showApiKeyInput();
+    apiKey=localStorage.getItem('anthropic_api_key');
+    if(!apiKey)return;
+  }
   if(!products.length)return;
   var btn=document.getElementById('aiBtn');
   var prog=document.getElementById('aiProgress');
@@ -1401,7 +1426,6 @@ async function aiRewrite(){
   prog.classList.remove('hidden');
   var total=products.length;var done=0;var errors=0;
 
-  // Batch products in groups of 5 for efficiency
   for(var i=0;i<products.length;i++){
     var p=products[i];
     if(p._aiRewritten)continue;
@@ -1436,7 +1460,12 @@ async function aiRewrite(){
 
       var resp=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{
+          'Content-Type':'application/json',
+          'x-api-key':apiKey,
+          'anthropic-version':'2023-06-01',
+          'anthropic-dangerous-direct-browser-access':'true'
+        },
         body:JSON.stringify({
           model:'claude-sonnet-4-20250514',
           max_tokens:300,
@@ -1455,7 +1484,14 @@ async function aiRewrite(){
       }else{
         errors++;
         var errData=await resp.json().catch(function(){return {};});
-        console.log('AI rewrite error for "'+p.title+'":',resp.status,errData.error&&errData.error.message||'');
+        var errMsg=errData.error&&errData.error.message||resp.status;
+        console.log('AI rewrite error for "'+p.title+'":',errMsg);
+        if(resp.status===401){toast('Invalid API key','err');break;}
+        if(resp.status===429){
+          console.log('Rate limited, waiting 10s...');
+          await new Promise(function(r){setTimeout(r,10000);});
+          i--; errors--; continue; // retry
+        }
       }
     }catch(e){
       errors++;
@@ -1466,11 +1502,10 @@ async function aiRewrite(){
     bar.style.width=(done/total*100)+'%';
     status.textContent=done+'/'+total+(errors?' ('+errors+' errors)':'');
     save();
-    // Brief pause to avoid rate limiting
-    if(i<products.length-1)await new Promise(function(r){setTimeout(r,200);});
+    renderTable();
+    await new Promise(function(r){setTimeout(r,300);});
   }
 
-  renderTable();
   btn.disabled=false;btn.textContent='\u2728 AI Rewrite';
   toast('Rewrote '+(done-errors)+' descriptions'+(errors?' ('+errors+' errors)':'')+'!');
   setTimeout(function(){prog.classList.add('hidden');},3000);
