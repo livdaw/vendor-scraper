@@ -5,17 +5,23 @@
 window.__scraperRunning=true;
 window.__stopScraper=false;
 window.__scrapedProducts=window.__scrapedProducts||[];
+var _total=0;
+var _phase="scanning";
 var _sb=document.createElement("div");
 _sb.id="__scraperStatus";
-_sb.style.cssText="position:fixed;top:0;left:0;right:0;z-index:999999;background:#1a1d27;color:#e4e6ef;font-family:monospace;font-size:13px;padding:10px 16px;border-bottom:2px solid #6c72ff;display:flex;align-items:center;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,0.3);";
-_sb.innerHTML='<span style="color:#6c72ff">\u25B6</span> Starting scraper...';
+_sb.style.cssText="position:fixed;top:0;left:0;right:0;z-index:999999;background:#1a1d27;color:#e4e6ef;font-family:monospace;font-size:13px;padding:10px 16px;border-bottom:2px solid #6c72ff;box-shadow:0 2px 12px rgba(0,0,0,0.3);";
+_sb.innerHTML='<div style="display:flex;align-items:center;gap:10px"><span style="color:#6c72ff">\u25B6</span> Starting scraper...</div>';
 document.body.appendChild(_sb);
 function _status(msg){_sb.innerHTML=msg;}
 function _poll(){
   var n=window.__scrapedProducts?window.__scrapedProducts.length:0;
-  _status('<span style="color:#34d399">\u25B6</span> Scraping... <strong>'+n+'</strong> products found &nbsp;|&nbsp; <a onclick="window.__stopScraper=true" style="color:#fb923c;cursor:pointer;text-decoration:underline">Stop</a>');
+  var pct=_total>0?Math.round(n/_total*100):0;
+  var prog=_total>0?'<div style="flex:1;max-width:200px;background:#242836;border-radius:4px;height:6px;overflow:hidden;margin:0 8px"><div style="height:100%;background:#6c72ff;width:'+pct+'%;transition:width 0.3s"></div></div>':'';
+  var countText=_total>0?('<strong>'+n+'</strong>/'+_total):('<strong>'+n+'</strong> found');
+  var phaseText=_phase==="scanning"?"Discovering products...":"Scraping...";
+  _status('<div style="display:flex;align-items:center;gap:10px;width:100%"><span style="color:#34d399">\u25B6</span> '+phaseText+' '+countText+prog+'<a onclick="window.__stopScraper=true" style="color:#fb923c;cursor:pointer;text-decoration:underline;margin-left:auto">Stop</a></div>');
 }
-var _pi=setInterval(_poll,1000);
+var _pi=setInterval(_poll,800);
 
 // ── SCRAPER CORE ──
 
@@ -858,6 +864,8 @@ if(PLATFORM==="shopify"){
   collName=collName?(collName.textContent||"").trim():"";
   if(!collName){var cm=collUrl.split("collections/")[1];collName=cm?(cm.split("/")[0]||"").replace(/-/g," "):"Products";}
   var shopProds=await fetchShopifyCollection(collUrl);
+  _total=shopProds.length;
+  _phase="scraping";
   var count=0;
   shopProds.forEach(function(sp){
     if(count>=MAX)return;
@@ -872,7 +880,8 @@ if(PLATFORM==="shopify"){
   var allUrls=[];var curUrl=location.href;var pg=0;
   while(curUrl&&pg<30){
     pg++;
-    _status('<span style="color:#6c72ff">\u25B6</span> Scanning page '+pg+'...');
+    _phase="scanning";
+    _status('<div style="display:flex;align-items:center;gap:10px"><span style="color:#6c72ff">\u25B6</span> Scanning page '+pg+'... ('+allUrls.length+' product URLs found)</div>');
     var doc=(pg===1)?document:null;
     if(!doc){try{doc=await fetchDoc(curUrl);}catch(e){break;}}
     var nw=findProductUrls(doc).filter(function(u){return allUrls.indexOf(u)<0;});
@@ -882,6 +891,8 @@ if(PLATFORM==="shopify"){
     await wait(500);
   }
   allUrls=allUrls.slice(0,MAX);
+  _total=allUrls.length;
+  _phase="scraping";
   for(var i=0;i<allUrls.length;i++){
     if(window.__stopScraper)break;
     try{
