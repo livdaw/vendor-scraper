@@ -1221,9 +1221,10 @@ function guessMaterials(p){
 }
 function guessManufacturer(p){
   if(p.manufacturer)return p.manufacturer;
-  var known=["Herman Miller","Steelcase","Haworth","Humanscale","Knoll","Orangebox","Senator","Boss Design","Vitra","Sedus","Ibstock","Wienerberger","Forterra","Marshalls","Marley","Rational","Hobart","Lincat","Mono","Telme","Winterhalter","Blue Seal","Williams","Foster","Electrolux","Moffat","Merrychef","Falcon","Bravilor"];
+  var known=["Herman Miller","Steelcase","Haworth","Humanscale","Knoll","Orangebox","Senator","Boss Design","Vitra","Sedus","Ibstock","Wienerberger","Forterra","Marshalls","Marley","Rational","Hobart","Lincat","Mono","Telme","Winterhalter","Blue Seal","Williams","Foster","Electrolux","Moffat","Merrychef","Falcon","Bravilor","electriQ","Zanussi","Bosch","Samsung","LG","Hotpoint","Indesit","Beko","Hisense","AEG","Miele","Neff","Siemens","Smeg","Rangemaster","CDA","Candy","Whirlpool","Russell Hobbs"];
   var text=(p.title||'')+'  '+(p.description||'');
   for(var i=0;i<known.length;i++){if(text.toLowerCase().indexOf(known[i].toLowerCase())>=0)return known[i];}
+  if(p.vendor)return p.vendor;
   return '';
 }
 
@@ -1277,7 +1278,7 @@ function exportCSV(){
     var pWidth=toMM(d.width||p.width||'');
     // Detect color from title
     var color=p.color||'';
-    if(!color){var tc=(p.title||'').toLowerCase();if(/\bmatt?\s*black\b/.test(tc)||/\bblack\b/.test(tc))color='Black';else if(/\bwhite\b/.test(tc))color='White';else if(/\bgrey\b|\bgray\b/.test(tc))color='Grey';}
+    if(!color){var tc=(p.title||'').toLowerCase();if(/\bmatt?\s*black\b/.test(tc)||/\bblack\b/.test(tc))color='Black';else if(/\bwhite\b/.test(tc))color='White';else if(/\bgrey\b|\bgray\b/.test(tc))color='Grey';else if(/\bstainless\s*steel\b/.test(tc)||/\bsilver\b/.test(tc))color='Silver';else if(/\bcream\b|\bivory\b/.test(tc))color='Cream';}
     // Determine stock_type, warranty, recertified based on source
     var stockType='reclaimed';var warranty='true';var recertified='true';
     var desc=(p.description||'').toLowerCase();

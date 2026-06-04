@@ -726,8 +726,8 @@ function enrichADProduct(product, doc){
           vals=[vals[0]*10,vals[1]*10,vals[2]*10];
         }
         var map=dimMaps[di];
-        if(map[0]==="h"){product.height=String(Math.round(vals[0]));product.width=String(Math.round(vals[1]));product.depth=String(Math.round(vals[2]));}
-        else{product.width=String(Math.round(vals[0]));product.depth=String(Math.round(vals[1]));product.height=String(Math.round(vals[2]));}
+        if(map[0]==="h"){product.height=Math.round(vals[0])+"mm";product.width=Math.round(vals[1])+"mm";product.depth=Math.round(vals[2])+"mm";}
+        else{product.width=Math.round(vals[0])+"mm";product.depth=Math.round(vals[1])+"mm";product.height=Math.round(vals[2])+"mm";}
         return true;
       }
     }
@@ -760,8 +760,8 @@ function enrichADProduct(product, doc){
     product.specFeatures=features.slice(0,15); // Keep top 15 relevant bullets
     product.description=(product.description||"")+" | "+features.slice(0,10).join(" | ");
   }
-  // 4. Warranty: check feature text
-  product.hasWarranty=/warranty|guaranteed|guarantee|warranted/.test(featureText);
+  // 4. Warranty: check feature text (AD uses "if it breaks" / "repair" / "damage cover")
+  product.hasWarranty=/warranty|guaranteed|guarantee|warranted|if it breaks|we'll fix it|repair centre|accidental damage/i.test(featureText);
 
   // 5. Category: use first specFeature (AD breadcrumb) as raw category name
   if(features.length>0){
