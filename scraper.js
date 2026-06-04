@@ -581,12 +581,23 @@ function extractADProducts(doc){
     var rawTitle=box.getAttribute('data-cnstrc-item-name')||"";
     var price=parseFloat(box.getAttribute('data-cnstrc-item-price'))||0;
     var pid=box.getAttribute('data-cnstrc-item-id')||"";
-    // Image
-    var imgEl=box.querySelector('img.offerImage');
-    var imgSrc=imgEl?(imgEl.getAttribute('src')||""):"";
-    if(imgSrc&&imgSrc.indexOf("http")!==0)imgSrc=origin+imgSrc;
-    // Clean off cache-bust param for a tidier URL
-    imgSrc=imgSrc.split("?")[0];
+    // Fallback price: look for visible price elements if data attribute is 0
+    if(price===0){
+      var prSels=['.price .now','.price .was','.price','.sr_price .now','.sr_price','.productPrice','[data-price]','.offerPrice'];
+      for(var pi=0;pi<prSels.length;pi++){
+        var prEl=box.querySelector(prSels[pi]);
+        if(prEl){
+          var prMatch=(prEl.textContent||prEl.getAttribute('data-price')||"").match(/[\d,]+\.?\d*/);
+          if(prMatch){var pv=parseFloat(prMatch[0].replace(",",""));if(pv>0){price=pv;break;}}
+        }
+      }
+    }
+    // Image: try multiple selectors
+    var imgEl=box.querySelector('img.offerImage')||box.querySelector('img[src*="/Images/"]')||box.querySelector('.sr_image img')||box.querySelector('img:not([src*="loader"]):not([src*="pixel"]):not([width="1"])');
+    var imgSrc=imgEl?(imgEl.getAttribute('data-src')||imgEl.getAttribute('src')||""):"";
+    if(imgSrc&&imgSrc.indexOf("data:image")===0)imgSrc=""; // skip base64 placeholders
+    if(imgSrc&&imgSrc.indexOf("http")!==0&&imgSrc.indexOf("/")===0)imgSrc=origin+imgSrc;
+    if(imgSrc)imgSrc=imgSrc.split("?")[0];
     // Product link
     var linkEl=box.querySelector('a[href*="/p/"]');
     var href=linkEl?(linkEl.getAttribute('href')||""):"";
@@ -599,10 +610,9 @@ function extractADProducts(doc){
     var grade="";
     var gm=href.match(/\/p\/(a[123])\//i);
     if(gm)grade=gm[1].toUpperCase();
-    // Clean title: strip "Refurbished " prefix and SKU codes
-    var title=rawTitle.replace(/^Refurbished\s+/i,"").trim();
+    // Clean title: strip common prefixes
+    var title=rawTitle.replace(/^Refurbished\s+/i,"").replace(/^ONLY\s*[-–]\s*/i,"").trim();
     // Remove inline SKU (e.g. "electriQ eiQMOBISOLO25BLACK Built In...")
-    // The SKU is usually the second word if it's all-caps/mixed with numbers
     var words=title.split(/\s+/);
     if(words.length>2&&/^[A-Z0-9]{6,}$/i.test(words[1])){
       words.splice(1,1);
@@ -613,14 +623,16 @@ function extractADProducts(doc){
     var hm=href.match(/\/p\/[^/]+\/[^/]+\/(.+?)$/);
     if(hm)handle=hm[1].split("?")[0];
     if(!handle)handle=title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+    var imgs=imgSrc?[imgSrc]:[];
     products.push({
       title:title,
       handle:handle,
       description:(grade?"Grade "+grade+". ":"")+(brand?brand+". ":"")+rawTitle,
-      variant_price:price.toFixed(2),
-      images:imgSrc?[imgSrc]:[],
+      price:price,
+      images:imgs,
+      thumbnail:imgs[0]||"",
       vendor:brand||"Appliances Direct",
-      tags:["refurbished",grade?("grade-"+grade.toLowerCase()):"",brand?brand.toLowerCase():""].filter(Boolean).join(","),
+      tags:["refurbished",grade?("grade-"+grade.toLowerCase()):"",brand?brand.toLowerCase():""].filter(Boolean),
       url:href,
       sku:pid,
       quantity:1
