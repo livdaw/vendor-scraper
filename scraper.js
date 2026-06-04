@@ -760,8 +760,18 @@ function enrichADProduct(product, doc){
     product.specFeatures=features.slice(0,15); // Keep top 15 relevant bullets
     product.description=(product.description||"")+" | "+features.slice(0,10).join(" | ");
   }
-  // 4. Warranty: check full page text
-  product.hasWarranty=/warranty|guaranteed|guarantee|warranted/.test(specText);
+  // 4. Warranty: check feature text
+  product.hasWarranty=/warranty|guaranteed|guarantee|warranted/.test(featureText);
+
+  // 5. Category: use first specFeature (AD breadcrumb) as raw category name
+  if(features.length>0){
+    var adCat=features[0].trim();
+    // specFeatures[0] is the top-level AD category (e.g. "Cooking", "Air Conditioning")
+    // Only use if it looks like a category (not a brand or SKU)
+    if(adCat.length>2&&adCat.length<50&&!/^[A-Z0-9]{4,}$/.test(adCat)){
+      product.vendorCategory=adCat;
+    }
+  }
 
   return product;
 }

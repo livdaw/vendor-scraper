@@ -1171,43 +1171,18 @@ function manualPaste(){var t=document.getElementById('pasteArea').value.trim();i
 // CSV Export (Medusa v2 template)
 // ══════════════════════════════════════════
 var CATEGORY_MAP=[
-{k:["office chair"],h:"office-chairs"},
-{k:["chair","seating","stool"],h:"chairs"},
-{k:["desk","workstation","table"],h:"tables-and-desks"},
-{k:["storage","shelving","locker","cabinet","cupboard","pedestal","bookcase","filing"],h:"storage-and-shelving"},
-{k:["sofa","reception","breakout"],h:"other-interior"},
-{k:["furniture"],h:"furniture"},
-{k:["carpet","flooring","carpet tile","raised access"],h:"raised-access-flooring"},
-{k:["outdoor light"],h:"outdoor-lighting"},
-{k:["ceiling tile"],h:"ceiling-tiles"},
-{k:["lighting","lamp","luminaire"],h:"lamps-and-luminaires"},
-{k:["air conditioning","hvac"],h:"air-conditioning-units"},
-{k:["heating","radiator","boiler"],h:"heating"},
-{k:["generator"],h:"generators"},
-{k:["computer","monitor","laptop"],h:"computer-equipment"},
-{k:["audio","video","projector"],h:"audio-and-video-equipment"},
-{k:["kitchen unit","kitchen fixture","kitchen cabinet"],h:"kitchen-units-and-fixtures"},
-{k:["cooking","oven","fryer","grill","griddle","hob","microwave","steam cooker","chargrill"],h:"cooking-equipment-white-goods-and-appliances"},
-{k:["commercial kitchen","catering","food preparation","warewashing","dishwasher","glasswasher","potwasher"],h:"commercial-kitchens"},
-{k:["refrigeration","fridge","freezer","chiller","ice maker","blast chiller"],h:"cooking-equipment-white-goods-and-appliances"},
-{k:["washbasin","basin","sink"],h:"washbasins"},
-{k:["tap","mixer tap"],h:"taps"},
-{k:["toilet","wc","urinal"],h:"wcs-and-urinals"},
-{k:["dryer","hand dryer","dispenser"],h:"dryers-and-dispensers"},
-{k:["doorset","door"],h:"doorsets"},
-{k:["partition","divider"],h:"partitions"},
-{k:["ironmongery","handle","hinge"],h:"ironmongery"},
-{k:["brick","engineering brick","facing brick","handmade brick","special brick"],h:"bricks"},
-{k:["paving","paviour","flagstone","slab","granite set","sandstone","limestone"],h:"stone"},
-{k:["tile","quarry tile","roof tile","roofing tile","ridge tile"],h:"tiles"},
-{k:["roof","roofing","slate","felt","lath"],h:"roof"},
-{k:["window","glazing"],h:"windows"},
-{k:["facade","cladding"],h:"facade"},
-{k:["steel","beam","column","structural"],h:"steel-and-structure"},
-{k:["timber","sleeper","wood","decking","fence","fencing","barrel","post"],h:"other-structure"},
-{k:["gravel","sand","aggregate"],h:"stone"},
-{k:["industrial"],h:"other-structure"},
-{k:["miscellaneous"],h:"miscellaneous-and-architectural"}
+{k:["office chair","chair","seating","stool","sofa","reception","breakout","desk","workstation","table","storage","shelving","locker","cabinet","cupboard","pedestal","bookcase","filing","furniture"],h:"furniture-and-interior-items"},
+{k:["carpet","flooring","carpet tile","raised access","vinyl","laminate floor"],h:"flooring-and-carpet"},
+{k:["ceiling tile","lighting","lamp","luminaire","outdoor light"],h:"ceilings-and-lighting"},
+{k:["air conditioning","hvac","heating","radiator","boiler","generator","fan","ventilation","cooling","air cooler","air conditioner"],h:"mep-plant"},
+{k:["computer","monitor","laptop","audio","video","projector","laundry","washing machine","tumble dryer","vacuum","cleaning","electrical","electronic"],h:"it-and-electrical-appliances"},
+{k:["kitchen unit","kitchen fixture","kitchen cabinet","cooking","oven","fryer","grill","griddle","hob","microwave","steam cooker","chargrill","commercial kitchen","catering","food preparation","warewashing","dishwasher","glasswasher","potwasher","refrigeration","fridge","freezer","chiller","ice maker","blast chiller","kitchen essential"],h:"kitchen-units-catering-and-joinery"},
+{k:["washbasin","basin","sink","tap","mixer tap","toilet","wc","urinal","dryer","hand dryer","dispenser","bathroom","shower","sanitary"],h:"sanitary-ware"},
+{k:["doorset","door","partition","divider","ironmongery","handle","hinge","window","glazing"],h:"doors-partitions-and-ironmongery"},
+{k:["brick","engineering brick","facing brick","handmade brick","paving","paviour","flagstone","slab","granite","sandstone","limestone","stone","aggregate","gravel"],h:"bricks-and-stone"},
+{k:["steel","beam","column","structural","timber","sleeper","wood","decking","fence","fencing","post","facade","cladding"],h:"steel-and-structure"},
+{k:["roof","roofing","slate","felt","lath","tile","quarry tile","roof tile"],h:"roofing"},
+{k:["miscellaneous","spare parts","accessories","industrial"],h:"miscellaneous-and-architectural"}
 ];
 var VALID_MATERIALS=["Aluminum","Bitumen","Brick","Carpet","Ceramic","Concrete","Electronics","Fabric","Glass","Gypsum","Metal","Mineral Fibre","Plastic","Steel","Stone"];
 
@@ -1226,14 +1201,17 @@ function guessCategory(p){
   return '';
 }
 function guessCondition(p){
-  if(p.condition){var c=p.condition.toLowerCase();if(c.indexOf('refurbish')>=0)return 'Very good';if(c.indexOf('new')>=0)return 'New (Excess/End-of-Line)';if(c.indexOf('used')>=0)return 'Good';}
+  if(p.condition){var c=p.condition.toLowerCase();if(c.indexOf('refurbish')>=0)return 'Refurbished';if(c.indexOf('new')>=0)return 'New (Excess/End-of-Line)';if(c.indexOf('used')>=0)return 'Reclaimed: Good';}
   var d=((p.description||'')+'  '+(p.title||'')).toLowerCase();
-  if(d.indexOf('brand new')>=0||d.indexOf('unused')>=0||d.indexOf('excess')>=0||d.indexOf('end of line')>=0||d.indexOf('surplus')>=0)return 'New (Excess/End-of-Line)';
-  if(d.indexOf('like new')>=0||d.indexOf('as new')>=0||d.indexOf('mint')>=0)return 'Like new';
-  if(d.indexOf('excellent')>=0||d.indexOf('refurbished')>=0||d.indexOf('very good')>=0)return 'Very good';
-  if(d.indexOf('satisfactory')>=0||d.indexOf('average')>=0||d.indexOf('fair')>=0||d.indexOf('worn')>=0||d.indexOf('marks')>=0||d.indexOf('scratches')>=0)return 'Satisfactory';
-  if(d.indexOf('reclaimed')>=0||d.indexOf('used')>=0||d.indexOf('second hand')>=0||d.indexOf('pre-owned')>=0)return 'Good';
-  return 'Good';
+  // AD grade mapping
+  if(d.indexOf('grade a1')>=0||d.indexOf('like new')>=0||d.indexOf('as new')>=0)return 'Refurbished';
+  if(d.indexOf('grade a2')>=0||d.indexOf('very good')>=0)return 'Reclaimed: Very Good';
+  if(d.indexOf('grade a3')>=0||d.indexOf('grade b')>=0)return 'Reclaimed: Good';
+  if(d.indexOf('only opened')>=0||d.indexOf('brand new')>=0||d.indexOf('unused')>=0||d.indexOf('excess')>=0||d.indexOf('end of line')>=0||d.indexOf('surplus')>=0)return 'New (Excess/End-of-Line)';
+  if(d.indexOf('excellent')>=0||d.indexOf('refurbished')>=0)return 'Refurbished';
+  if(d.indexOf('satisfactory')>=0||d.indexOf('average')>=0||d.indexOf('fair')>=0||d.indexOf('worn')>=0)return 'Reclaimed: Satisfactory';
+  if(d.indexOf('reclaimed')>=0||d.indexOf('used')>=0||d.indexOf('second hand')>=0||d.indexOf('pre-owned')>=0)return 'Reclaimed: Good';
+  return 'Reclaimed: Good';
 }
 function guessMaterials(p){
   var d=((p.description||'')+'  '+(p.title||'')+'  '+(p.tags||[]).join(' ')).toLowerCase();
@@ -1251,7 +1229,7 @@ function guessManufacturer(p){
 
 function exportCSV(){
   if(!products.length)return;
-  var H=["product_title","product_subtitle","product_description","product_external_id","product_weight","product_length","product_height","product_width","product_hs_code","product_mid_code","product_origin_country","product_material","product_images","variant_title","variant_sku","variant_barcode","variant_ean","variant_upc","variant_hs_code","variant_mid_code","variant_origin_country","variant_material","variant_weight","variant_length","variant_height","variant_width","quantity","price_gbp","product_category","product_type","condition_attr","condition-notes_attr","manufacture-year_attr","manufacturer_attr","materials_attr","pack-size_attr"];
+  var H=["product_title","product_subtitle","product_description","product_external_id","product_weight","product_length","product_height","product_width","product_hs_code","product_mid_code","product_origin_country","product_material","product_images","variant_title","variant_sku","variant_barcode","variant_ean","variant_upc","variant_hs_code","variant_mid_code","variant_origin_country","variant_material","variant_weight","variant_length","variant_height","variant_width","quantity","price_gbp","product_category","product_type","stock_type","warranty","recertified","condition_attr","condition-notes_attr","manufacture-year_attr","manufacturer_attr","materials_attr","pack-size_attr","color_attr"];
   var rows=[H];
   var skipSold=document.getElementById('skipSold').checked;
   var skipped=0;
@@ -1294,20 +1272,32 @@ function exportCSV(){
     var imgsStr=imgs.join(';');
     var cat=guessCategory(p),cond=guessCondition(p),mats=guessMaterials(p),mfr=guessManufacturer(p);
     var pWeight=toKG(p.weight);
-    var pLength=toMM(d.length||d.depth||'');
-    var pHeight=toMM(d.height||'');
-    var pWidth=toMM(d.width||'');
+    var pLength=toMM(d.length||d.depth||p.depth||'');
+    var pHeight=toMM(d.height||p.height||'');
+    var pWidth=toMM(d.width||p.width||'');
+    // Detect color from title
+    var color=p.color||'';
+    if(!color){var tc=(p.title||'').toLowerCase();if(/\bmatt?\s*black\b/.test(tc)||/\bblack\b/.test(tc))color='Black';else if(/\bwhite\b/.test(tc))color='White';else if(/\bgrey\b|\bgray\b/.test(tc))color='Grey';}
+    // Determine stock_type, warranty, recertified based on source
+    var stockType='reclaimed';var warranty='true';var recertified='true';
+    var desc=(p.description||'').toLowerCase();
+    if(desc.indexOf('only opened')>=0||desc.indexOf('brand new')>=0||desc.indexOf('unused')>=0||desc.indexOf('excess')>=0){
+      stockType='excess';recertified='false';
+    }
+    if(p.hasWarranty===false)warranty='false';
     var vars=p.variants||[{title:'Default',sku:p.sku||'',price:p.price||0}];
     vars.forEach(function(v){
+      // Price in pence (multiply by 100)
+      var priceInPence=String(Math.round(parseFloat(v.price||0)*100));
       rows.push([
         p.title||'','',
         (p.description||'').replace(/"/g,'""'),
-        p.url||'',pWeight,pLength,pHeight,pWidth,'','','GB','',
+        '',pWeight,pLength,pHeight,pWidth,'','','GB','',
         imgsStr,
         v.title||'Default',v.sku||'','','','','','','GB','',pWeight,pLength,pHeight,pWidth,
         String(p.quantity||0),
-        String(parseFloat(v.price||0).toFixed(2)),
-        cat,'Stock',cond,'','',mfr,mats,''
+        priceInPence,
+        cat,'Stock',stockType,warranty,recertified,cond,'','',mfr,mats,'',color
       ]);
     });
   });
