@@ -644,100 +644,108 @@ function extractADProducts(doc){
 // ── Enrich AD product by visiting its detail page ──
 function enrichADProduct(product, doc){
   if(!doc)return product;
-  // 1. Gallery images: collect all product images from the page
+  // 1. Gallery images: collect unique product images, deduplicated by base name
   var imgs=[];
-  var seen={};
+  var seenBase={};
+  // Helper: normalize URL to canonical key (strip size suffixes) and prefer Supersize
+  function addImg(rawUrl){
+    if(!rawUrl||rawUrl.indexOf("data:image")===0)return;
+    var s=rawUrl.split("?")[0];
+    if(s.indexOf("http")!==0&&s.indexOf("/")===0)s=location.origin+s;
+    // Skip non-product images (logos, icons, banners, energy labels)
+    var sl=s.toLowerCase();
+    if(sl.indexOf("logo")>=0||sl.indexOf("icon")>=0||sl.indexOf("banner")>=0||sl.indexOf("energy")>=0||sl.indexOf("placeholder")>=0)return;
+    // Create canonical key by stripping size suffixes
+    var key=s.replace(/_(?:Supersize|Classic|Thumbnail|Small|Medium|Large|Zoom)\./i,"_X.");
+    if(seenBase[key])return;
+    seenBase[key]=1;
+    // Prefer Supersize version
+    var best=s.replace(/_(?:Classic|Thumbnail|Small|Medium|Large)\./i,"_Supersize.");
+    imgs.push(best);
+  }
   // Primary large image
   var mainImg=doc.querySelector('#mainImage img,#productImage img,.product-image img,.mainImage img,img.productImage');
-  if(mainImg){
-    var s=mainImg.getAttribute('data-src')||mainImg.getAttribute('src')||"";
-    if(s&&s.indexOf("data:image")<0){
-      s=s.split("?")[0];
-      if(s.indexOf("http")!==0&&s.indexOf("/")===0)s=location.origin+s;
-      if(!seen[s]){seen[s]=1;imgs.push(s);}
-    }
-  }
-  // Thumbnail gallery images (the carousel at bottom of AD pages)
+  if(mainImg)addImg(mainImg.getAttribute('data-src')||mainImg.getAttribute('src')||"");
+  // Thumbnail gallery images
   doc.querySelectorAll('.product-thumbnails img,.thumbnails img,.altImages img,#thumbnails img,.thumb-list img,.imageGallery img,img[data-large],img[data-zoom],a[data-image] img,#altViews img,.alt-images img,.prdImage img').forEach(function(img){
-    var s=img.getAttribute('data-large')||img.getAttribute('data-zoom')||img.getAttribute('data-src')||img.getAttribute('src')||"";
-    if(!s||s.indexOf("data:image")===0)return;
-    // Try to get full-size version: replace _Thumbnail/_Classic with _Supersize
-    s=s.replace(/_Thumbnail\./,"_Supersize.").replace(/_Classic\./,"_Supersize.").replace(/_Small\./,"_Supersize.");
-    s=s.split("?")[0];
-    if(s.indexOf("http")!==0&&s.indexOf("/")===0)s=location.origin+s;
-    if(!seen[s]){seen[s]=1;imgs.push(s);}
+    addImg(img.getAttribute('data-large')||img.getAttribute('data-zoom')||img.getAttribute('data-src')||img.getAttribute('src')||"");
   });
-  // Also try any image with /Images/ in src that looks like product photos
+  // Fallback: any /Images/ img if we still have very few
   if(imgs.length<2){
     doc.querySelectorAll('img[src*="/Images/"],img[data-src*="/Images/"]').forEach(function(img){
-      var s=img.getAttribute('data-src')||img.getAttribute('src')||"";
-      if(!s||s.indexOf("data:image")===0||s.indexOf("logo")>=0||s.indexOf("icon")>=0||s.indexOf("banner")>=0)return;
-      s=s.split("?")[0];
-      if(s.indexOf("http")!==0&&s.indexOf("/")===0)s=location.origin+s;
-      if(!seen[s]){seen[s]=1;imgs.push(s);}
+      addImg(img.getAttribute('data-src')||img.getAttribute('src')||"");
     });
   }
+  // Cap at 8 images max
+  imgs=imgs.slice(0,8);
   if(imgs.length>0){product.images=imgs;product.thumbnail=imgs[0];}
 
-  // 2. Dimensions & specs: scan FULL page text (AD uses non-standard class names)
-  var specText=(doc.body?doc.body.textContent:"").toLowerCase();
-  // Also collect bullet points from ALL li elements in main content
+  // 2. Dimensions & specs: extract from specFeatures FIRST (clean bullet text), then fall back to page text
   var features=[];
   doc.querySelectorAll('li').forEach(function(li){
     var t=li.textContent.trim();
     if(t&&t.length>5&&t.length<300){
-      // Skip nav/menu items
       var parent=li.parentElement;
       if(parent&&parent.closest&&(parent.closest('nav')||parent.closest('header')||parent.closest('footer')))return;
       features.push(t);
     }
   });
 
-  // Parse dimensions: many AD formats
+  // Try dimensions from feature bullets first (most reliable)
+  var featureText=features.join(" ").toLowerCase();
+  var dimFound=false;
   var dimPatterns=[
-    // "WxDxH - 600mm x 141mm x 600mm" or "WxDxH: 600 x 141 x 600mm"
-    /(?:wxdxh|w\s*x\s*d\s*x\s*h)\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?/i,
-    // "Dimensions: (H)39cm x (W)60cm x (D)40cm"
+    // "Dimensions: H 38.8 x W 59.5 x D 40cm" or "H38.8 x W59.5 x D40cm"
+    /(?:dimensions?\s*[-:–]\s*)?(?:h)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*(?:w)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*(?:d)\s*([\d.]+)\s*(?:mm|cm)?/i,
+    // "(H)39cm x (W)60cm x (D)40cm"
     /\(h\)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*\(w\)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*\(d\)\s*([\d.]+)\s*(?:mm|cm)?/i,
-    // "(W)60cm x (D)40cm x (H)39cm"  
+    // "WxDxH - 600mm x 141mm x 600mm"
+    /(?:wxdxh|w\s*x\s*d\s*x\s*h)\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?/i,
+    // "(W)60cm x (D)40cm x (H)39cm"
     /\(w\)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*\(d\)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*\(h\)\s*([\d.]+)\s*(?:mm|cm)?/i,
-    // "HxWxD: 39 x 60 x 40cm"
-    /(?:hxwxd|h\s*x\s*w\s*x\s*d)\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?/i,
-    // "Dimensions: 600 x 141 x 600 mm" (W x D x H assumed)
+    // "W 77 x D 52 x H 5cm" (e.g. hob dimensions)
+    /(?:w)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*(?:d)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*(?:h)\s*([\d.]+)\s*(?:mm|cm)?/i,
+    // "Dimensions: 600 x 141 x 600 mm" (assumed WxDxH)
     /dimensions?\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?/i,
-    // "600mm (W) x 141mm (D) x 600mm (H)"
+    // "600mm(w) x 141mm(d) x 600mm(h)"
     /([\d.]+)\s*(?:mm|cm)?\s*\(w\)\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*\(d\)\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*\(h\)/i,
-    // "600mm(w) x 141mm(d) x 600mm(h)" no spaces
-    /([\d.]+)\s*(?:mm|cm)?\(w\)\s*x\s*([\d.]+)\s*(?:mm|cm)?\(d\)\s*x\s*([\d.]+)\s*(?:mm|cm)?\(h\)/i
+    // "600mm (W) x 141mm (D) x 600mm (H)"
+    /([\d.]+)\s*(?:mm|cm)?\s*\(w\)\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*\(d\)\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*\(h\)/i
   ];
-  // Mapping: each pattern specifies what group maps to which dimension
-  // Patterns 0,4: W,D,H  |  Patterns 1: H,W,D  |  Pattern 2,5,6: W,D,H  |  Pattern 3: H,W,D
-  var dimMaps=["wdh","hwD","wdh","hwd","wdh","wdh","wdh"];
-  for(var di=0;di<dimPatterns.length;di++){
-    var dm=specText.match(dimPatterns[di]);
-    if(dm){
-      var map=dimMaps[di]||"wdh";
-      var v1=dm[1],v2=dm[2],v3=dm[3];
-      // Check if values are in cm (small numbers) and convert to mm
-      var vals=[parseFloat(v1),parseFloat(v2),parseFloat(v3)];
-      // If all values < 300 and the text near the match says "cm", multiply by 10
-      var nearCm=specText.substring(Math.max(0,dm.index-5),dm.index+dm[0].length+5).indexOf("cm")>=0;
-      if(nearCm&&vals[0]<300&&vals[1]<300&&vals[2]<300){
-        vals=[vals[0]*10,vals[1]*10,vals[2]*10];
+  // Maps: h=height first, w=width first
+  var dimMaps=["hwd","hwd","wdh","wdh","wdh","wdh","wdh","wdh"];
+
+  function tryDimMatch(text){
+    for(var di=0;di<dimPatterns.length;di++){
+      var dm=text.match(dimPatterns[di]);
+      if(dm){
+        var vals=[parseFloat(dm[1]),parseFloat(dm[2]),parseFloat(dm[3])];
+        // Detect cm vs mm: if all values < 200, likely cm — convert to mm
+        var nearText=text.substring(Math.max(0,dm.index-2),dm.index+dm[0].length+5);
+        if(nearText.indexOf("cm")>=0&&vals[0]<200&&vals[1]<200&&vals[2]<200){
+          vals=[vals[0]*10,vals[1]*10,vals[2]*10];
+        }
+        var map=dimMaps[di];
+        if(map[0]==="h"){product.height=String(Math.round(vals[0]));product.width=String(Math.round(vals[1]));product.depth=String(Math.round(vals[2]));}
+        else{product.width=String(Math.round(vals[0]));product.depth=String(Math.round(vals[1]));product.height=String(Math.round(vals[2]));}
+        return true;
       }
-      if(map[0]==="w"){product.width=String(Math.round(vals[0]));product.depth=String(Math.round(vals[1]));product.height=String(Math.round(vals[2]));}
-      else{product.height=String(Math.round(vals[0]));product.width=String(Math.round(vals[1]));product.depth=String(Math.round(vals[2]));}
-      break;
     }
+    return false;
   }
-  // Fallback: try individual dimension fields
-  if(!product.width){var wm=specText.match(/(?:width|wide)\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?/i);if(wm)product.width=wm[1];}
-  if(!product.height){var hm=specText.match(/(?:height|tall|high)\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?/i);if(hm)product.height=hm[1];}
-  if(!product.depth){var dm2=specText.match(/(?:depth|deep)\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?/i);if(dm2)product.depth=dm2[1];}
-  // Weight
-  if(!product.weight){var wt=specText.match(/(?:weight|net weight)\s*[-:–]\s*([\d.]+)\s*(?:kg|g)?/i);if(wt)product.weight=wt[1];}
-  // Color detection
-  var colorMatch=specText.match(/(?:colou?r|finish)\s*[-:–]\s*((?:matt?\s*)?(?:black|white|grey|gray|silver|chrome|brass|gold|copper|stainless\s*steel|cream|blue|red|green))/i);
+
+  // 1st priority: search specFeatures/bullet text
+  dimFound=tryDimMatch(featureText);
+  // 2nd priority: search full page text BUT only with explicit "dimensions" keyword
+  if(!dimFound){
+    var pageText=(doc.body?doc.body.textContent:"").toLowerCase();
+    // Only match if preceded by "dimensions" or "dim" to avoid false positives
+    var dimSection=pageText.match(/dimensions?[^.]{0,200}/i);
+    if(dimSection)dimFound=tryDimMatch(dimSection[0]);
+  }
+
+  // Color detection from specFeatures or title (NOT full page — avoids false positives)
+  var colorMatch=featureText.match(/(?:colou?r|finish)\s*[-:–]\s*((?:matt?\s*)?(?:black|white|grey|gray|silver|chrome|brass|gold|copper|stainless\s*steel|cream|blue|red|green))/i);
   if(colorMatch)product.color=colorMatch[1].trim();
   if(!product.color){
     // Try from title
@@ -1011,37 +1019,58 @@ function findCategories(doc){
 }
 
 // ── Find next page link ──
-function findNextPage(doc){
+function findNextPage(doc, pageUrl){
+  var docUrl=pageUrl||location.href;
   if(PLATFORM==="appliancesdirect"){
     // AD uses numbered page links with > arrow for next
     var origin=location.origin;
-    function resolveUrl(h){if(!h)return null;if(h.indexOf("http")===0)return h;if(h.indexOf("/")===0)return origin+h;return origin+"/"+h;}
-    // Try explicit next-page links first
-    var nx=doc.querySelector('.pagination a.next,.pagination a[rel="next"],a.paging-next,.pager a.next,a[aria-label="Next"],a[title="Next page"],a[title="Next"]');
-    if(nx)return resolveUrl(nx.getAttribute("href"))||null;
+    function resolveUrl(h){if(!h)return null;h=h.trim();if(h.indexOf("http")===0)return h;if(h.indexOf("/")===0)return origin+h;return origin+"/"+h;}
+    // Try explicit next-page links (broad selectors for AD's various layouts)
+    var nxSels=[
+      '.pagination a.next','.pagination a[rel="next"]','a.paging-next','.pager a.next',
+      'a[aria-label="Next"]','a[title="Next page"]','a[title="Next"]',
+      '.filterBar__paginationArrow--next','a.pagination__next','a.next-page',
+      '.productPager a.next','.pagerLinks a.next','a.pager__next',
+      'li.next a','li.pagination-next a','.pagination li:last-child a'
+    ];
+    for(var si=0;si<nxSels.length;si++){
+      var nx=doc.querySelector(nxSels[si]);
+      if(nx){var h=nx.getAttribute("href");if(h&&h!=="#")return resolveUrl(h);}
+    }
     // Try all pagination-area links for numbered pages or ">" text
-    var pLinks=doc.querySelectorAll('.pagination a,.pager a,.paginator a,a[href*="pn="],a[href*="page="],a[href*="/page/"]');
+    var pLinks=doc.querySelectorAll('.pagination a,.pager a,.paginator a,.productPager a,.pagerLinks a,.filterBar__pagination a,a[href*="pn="],a[href*="page="],a[href*="/page/"],a[data-pn]');
     var curPage=1;var nextUrl=null;
-    // Detect current page from URL or active element
-    var pm=(location.href).match(/(?:pn|page)[=/]([0-9]+)/);
+    // Detect current page from the ACTUAL page URL (not location.href)
+    var pm=docUrl.match(/(?:pn|page)[=/]([0-9]+)/i);
     if(pm)curPage=parseInt(pm[1]);
-    var activeEl=doc.querySelector('.pagination .active,.pagination .current,.pager .active,a.paging-active');
-    if(activeEl){var av=parseInt(activeEl.textContent);if(!isNaN(av))curPage=av;}
+    // Also check active element in the fetched doc
+    var activeEl=doc.querySelector('.pagination .active,.pagination .current,.pager .active,a.paging-active,.pagination li.active a,a[data-pn].active,strong.current,[aria-current="page"]');
+    if(activeEl){var av=parseInt(activeEl.textContent);if(!isNaN(av)&&av>0)curPage=av;}
+    console.log("[scraper] findNextPage: curPage="+curPage+", pLinks found="+pLinks.length+", docUrl="+docUrl.substring(0,100));
     pLinks.forEach(function(a){
+      if(nextUrl)return;
       var txt=(a.textContent||"").trim();
-      var href=a.getAttribute("href")||"";
+      var href=a.getAttribute("href")||a.getAttribute("data-href")||"";
+      var dataPn=a.getAttribute("data-pn");
+      // Match data-pn attribute
+      if(dataPn&&parseInt(dataPn)===curPage+1&&href){nextUrl=resolveUrl(href);return;}
       // Match numbered link for curPage+1
-      var hm=href.match(/(?:pn|page)[=/]([0-9]+)/);
-      if(hm&&parseInt(hm[1])===curPage+1)nextUrl=resolveUrl(href);
+      var hm=href.match(/(?:pn|page)[=/]([0-9]+)/i);
+      if(hm&&parseInt(hm[1])===curPage+1){nextUrl=resolveUrl(href);return;}
       // Match ">" or "›" or "Next" or "»" text
-      if(!nextUrl&&/^(>|›|»|Next|next|NEXT)$/.test(txt))nextUrl=resolveUrl(href);
+      if(/^(>|›|»|→|Next|next|NEXT)$/.test(txt)&&href&&href!=="#"){nextUrl=resolveUrl(href);return;}
     });
-    // If numbered pagination found nothing, try incrementing page param in current URL
+    // Fallback: if current page had products and no next link found, try incrementing pn= in URL
     if(!nextUrl&&curPage>=1){
-      var baseUrl=location.href.replace(/([?&])(?:pn|page)=[0-9]+/,"$1page="+(curPage+1));
-      if(baseUrl===location.href)baseUrl+=(location.href.indexOf("?")>=0?"&":"?")+"page="+(curPage+1);
-      // Only use this if there are more products (check if current page had a full set)
-      nextUrl=null; // Don't auto-increment blindly, rely on actual links
+      var prodCount=doc.querySelectorAll('.OfferBox[data-cnstrc-item-id]').length;
+      if(prodCount>=24){ // AD typically shows 24-48 per page; if full page, likely more
+        var newUrl=docUrl.replace(/([?&])pn=\d+/,"$1pn="+(curPage+1));
+        if(newUrl===docUrl){
+          newUrl+=((docUrl.indexOf("?")>=0)?"&":"?")+"pn="+(curPage+1);
+        }
+        console.log("[scraper] No next link found but page had "+prodCount+" products, trying: "+newUrl.substring(0,120));
+        nextUrl=newUrl;
+      }
     }
     return nextUrl;
   }
@@ -1134,7 +1163,7 @@ if(PLATFORM==="shopify"){
     });
     if(window.__stopScraper||adAllProducts.length>=adMax)break;
     if(adPagesOnly)break; // Only scrape the current page
-    curUrl=findNextPage(doc);
+    curUrl=findNextPage(doc, curUrl);
     if(curUrl)await wait(800);
   }
   // Phase 2: Visit each product page for images, dimensions, specs
@@ -1164,7 +1193,7 @@ if(PLATFORM==="shopify"){
     var nw=findProductUrls(doc).filter(function(u){return allUrls.indexOf(u)<0;});
     allUrls=allUrls.concat(nw);
     if(allUrls.length>=MAX)break;
-    curUrl=findNextPage(doc);
+    curUrl=findNextPage(doc, curUrl);
     await wait(500);
   }
   allUrls=allUrls.slice(0,MAX);
