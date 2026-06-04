@@ -679,53 +679,65 @@ function enrichADProduct(product, doc){
   }
   if(imgs.length>0){product.images=imgs;product.thumbnail=imgs[0];}
 
-  // 2. Dimensions from "Why buy me" / spec lists / feature bullets
-  var specText="";
-  doc.querySelectorAll('.product-features li,.product-specifications li,.whyBuyMe li,.productInfo li,#specTable td,#productSpec td,.featureBullets li,ul.features li,.wbm-list li,.why-buy li').forEach(function(el){
-    specText+=" "+el.textContent;
+  // 2. Dimensions & specs: scan FULL page text (AD uses non-standard class names)
+  var specText=(doc.body?doc.body.textContent:"").toLowerCase();
+  // Also collect bullet points from ALL li elements in main content
+  var features=[];
+  doc.querySelectorAll('li').forEach(function(li){
+    var t=li.textContent.trim();
+    if(t&&t.length>5&&t.length<300){
+      // Skip nav/menu items
+      var parent=li.parentElement;
+      if(parent&&parent.closest&&(parent.closest('nav')||parent.closest('header')||parent.closest('footer')))return;
+      features.push(t);
+    }
   });
-  // Also scan any table rows for specs
-  doc.querySelectorAll('table tr,.specificationTable tr').forEach(function(row){
-    var cells=row.querySelectorAll('td,th');
-    cells.forEach(function(c){specText+=" "+c.textContent;});
-  });
-  // Also grab all text from the main product content area
-  var contentEl=doc.querySelector('.product-detail,.productDetail,#productContent,.product-content,.prodInfoContent');
-  if(contentEl)specText+=" "+contentEl.textContent;
-  specText=specText.toLowerCase();
 
-  // Parse WxDxH or Width/Height/Depth
+  // Parse dimensions: many AD formats
   var dimPatterns=[
-    /(?:wxdxh|w\s*x\s*d\s*x\s*h)\s*[-:]\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?/i,
-    /(\d+)\s*(?:mm)?\s*(?:\(w\))\s*x\s*(\d+)\s*(?:mm)?\s*(?:\(d\))\s*x\s*(\d+)\s*(?:mm)?\s*(?:\(h\))/i
+    // "WxDxH - 600mm x 141mm x 600mm" or "WxDxH: 600 x 141 x 600mm"
+    /(?:wxdxh|w\s*x\s*d\s*x\s*h)\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?/i,
+    // "Dimensions: (H)39cm x (W)60cm x (D)40cm"
+    /\(h\)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*\(w\)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*\(d\)\s*([\d.]+)\s*(?:mm|cm)?/i,
+    // "(W)60cm x (D)40cm x (H)39cm"  
+    /\(w\)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*\(d\)\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*\(h\)\s*([\d.]+)\s*(?:mm|cm)?/i,
+    // "HxWxD: 39 x 60 x 40cm"
+    /(?:hxwxd|h\s*x\s*w\s*x\s*d)\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?/i,
+    // "Dimensions: 600 x 141 x 600 mm" (W x D x H assumed)
+    /dimensions?\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?/i,
+    // "600mm (W) x 141mm (D) x 600mm (H)"
+    /([\d.]+)\s*(?:mm|cm)?\s*\(w\)\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*\(d\)\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*\(h\)/i,
+    // "600mm(w) x 141mm(d) x 600mm(h)" no spaces
+    /([\d.]+)\s*(?:mm|cm)?\(w\)\s*x\s*([\d.]+)\s*(?:mm|cm)?\(d\)\s*x\s*([\d.]+)\s*(?:mm|cm)?\(h\)/i
   ];
+  // Mapping: each pattern specifies what group maps to which dimension
+  // Patterns 0,4: W,D,H  |  Patterns 1: H,W,D  |  Pattern 2,5,6: W,D,H  |  Pattern 3: H,W,D
+  var dimMaps=["wdh","hwD","wdh","hwd","wdh","wdh","wdh"];
   for(var di=0;di<dimPatterns.length;di++){
     var dm=specText.match(dimPatterns[di]);
     if(dm){
-      product.width=dm[1];product.depth=dm[2];product.height=dm[3];
+      var map=dimMaps[di]||"wdh";
+      var v1=dm[1],v2=dm[2],v3=dm[3];
+      // Check if values are in cm (small numbers) and convert to mm
+      var vals=[parseFloat(v1),parseFloat(v2),parseFloat(v3)];
+      // If all values < 300 and the text near the match says "cm", multiply by 10
+      var nearCm=specText.substring(Math.max(0,dm.index-5),dm.index+dm[0].length+5).indexOf("cm")>=0;
+      if(nearCm&&vals[0]<300&&vals[1]<300&&vals[2]<300){
+        vals=[vals[0]*10,vals[1]*10,vals[2]*10];
+      }
+      if(map[0]==="w"){product.width=String(Math.round(vals[0]));product.depth=String(Math.round(vals[1]));product.height=String(Math.round(vals[2]));}
+      else{product.height=String(Math.round(vals[0]));product.width=String(Math.round(vals[1]));product.depth=String(Math.round(vals[2]));}
       break;
     }
   }
-  // Try individual dimension fields
-  if(!product.width){
-    var wm=specText.match(/(?:width|wide)\s*[-:]\s*([\d.]+)\s*(?:mm|cm)?/i);
-    if(wm)product.width=wm[1];
-  }
-  if(!product.height){
-    var hm=specText.match(/(?:height|tall|high)\s*[-:]\s*([\d.]+)\s*(?:mm|cm)?/i);
-    if(hm)product.height=hm[1];
-  }
-  if(!product.depth){
-    var dm2=specText.match(/(?:depth|deep)\s*[-:]\s*([\d.]+)\s*(?:mm|cm)?/i);
-    if(dm2)product.depth=dm2[1];
-  }
+  // Fallback: try individual dimension fields
+  if(!product.width){var wm=specText.match(/(?:width|wide)\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?/i);if(wm)product.width=wm[1];}
+  if(!product.height){var hm=specText.match(/(?:height|tall|high)\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?/i);if(hm)product.height=hm[1];}
+  if(!product.depth){var dm2=specText.match(/(?:depth|deep)\s*[-:–]\s*([\d.]+)\s*(?:mm|cm)?/i);if(dm2)product.depth=dm2[1];}
   // Weight
-  if(!product.weight){
-    var wt=specText.match(/(?:weight)\s*[-:]\s*([\d.]+)\s*(?:kg|g)?/i);
-    if(wt)product.weight=wt[1];
-  }
+  if(!product.weight){var wt=specText.match(/(?:weight|net weight)\s*[-:–]\s*([\d.]+)\s*(?:kg|g)?/i);if(wt)product.weight=wt[1];}
   // Color detection
-  var colorMatch=specText.match(/(?:colou?r|finish)\s*[-:]\s*((?:matt?\s*)?(?:black|white|grey|gray|silver|chrome|brass|gold|copper|stainless\s*steel|cream|blue|red|green))/i);
+  var colorMatch=specText.match(/(?:colou?r|finish)\s*[-:–]\s*((?:matt?\s*)?(?:black|white|grey|gray|silver|chrome|brass|gold|copper|stainless\s*steel|cream|blue|red|green))/i);
   if(colorMatch)product.color=colorMatch[1].trim();
   if(!product.color){
     // Try from title
@@ -735,20 +747,13 @@ function enrichADProduct(product, doc){
     else if(/\bgrey\b|\bgray\b/.test(tc))product.color="Grey";
   }
 
-  // 3. Better description: grab feature bullets
-  var features=[];
-  doc.querySelectorAll('.product-features li,.whyBuyMe li,.wbm-list li,.why-buy li,ul.features li,.featureBullets li').forEach(function(li){
-    var t=li.textContent.trim();
-    if(t&&t.length>3&&t.length<200)features.push(t);
-  });
+  // 3. Better description from collected features
   if(features.length>0){
-    product.specFeatures=features;
-    // Append features to description
-    product.description=(product.description||"")+" | "+features.join(" | ");
+    product.specFeatures=features.slice(0,15); // Keep top 15 relevant bullets
+    product.description=(product.description||"")+" | "+features.slice(0,10).join(" | ");
   }
-  // 4. Warranty: check if page mentions warranty
-  var fullText=(doc.body?doc.body.textContent:"").toLowerCase();
-  product.hasWarranty=/warranty|guaranteed|guarantee/.test(fullText);
+  // 4. Warranty: check full page text
+  product.hasWarranty=/warranty|guaranteed|guarantee|warranted/.test(specText);
 
   return product;
 }
