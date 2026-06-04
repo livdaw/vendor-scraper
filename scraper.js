@@ -38,6 +38,8 @@ function detectPlatform(doc){
   // Shopify detection (check before others)
   if(doc.querySelector('link[href*="cdn.shopify"]')||doc.querySelector('script[src*="cdn.shopify"]')||doc.querySelector('meta[name="shopify-checkout-api-token"]')||doc.querySelector('#shopify-section-header')||window.Shopify)return "shopify";
   if(doc.querySelector('link[href*="bigcommerce"]')||doc.querySelector('script[src*="bigcommerce"]')||doc.querySelector('.productView')||doc.querySelector('[data-content-region]')||doc.querySelector('meta[name="platform"][content*="BigCommerce"]'))return "bigcommerce";
+  // Appliances Direct (BuyItDirect custom CMS)
+  if(doc.querySelector('.OfferBox[data-cnstrc-item-id]')||location.hostname.indexOf("appliancesdirect")>=0)return "appliancesdirect";
   // Brothers Office Furniture (custom platform)
   if(doc.querySelector('.detailspage')||doc.querySelector('.proditemno')||doc.querySelector('a[href*="d-url-"]'))return "brothers";
   if(doc.querySelector('.woocommerce')||doc.querySelector('body.woocommerce')||doc.querySelector('.woocommerce-breadcrumb')||doc.querySelector('meta[name="generator"][content*="WooCommerce"]')||doc.querySelector('.product_title'))return "woocommerce";
@@ -571,6 +573,62 @@ function extractBrothers(doc,url){
   };
 }
 
+// ── Appliances Direct extractor (from .OfferBox on listing page) ──
+function extractADProducts(doc){
+  var products=[];
+  var origin=location.origin;
+  doc.querySelectorAll('.OfferBox[data-cnstrc-item-id]').forEach(function(box){
+    var rawTitle=box.getAttribute('data-cnstrc-item-name')||"";
+    var price=parseFloat(box.getAttribute('data-cnstrc-item-price'))||0;
+    var pid=box.getAttribute('data-cnstrc-item-id')||"";
+    // Image
+    var imgEl=box.querySelector('img.offerImage');
+    var imgSrc=imgEl?(imgEl.getAttribute('src')||""):"";
+    if(imgSrc&&imgSrc.indexOf("http")!==0)imgSrc=origin+imgSrc;
+    // Clean off cache-bust param for a tidier URL
+    imgSrc=imgSrc.split("?")[0];
+    // Product link
+    var linkEl=box.querySelector('a[href*="/p/"]');
+    var href=linkEl?(linkEl.getAttribute('href')||""):"";
+    if(href&&href.indexOf("http")!==0)href=origin+href;
+    // Brand from logo
+    var logoImg=box.querySelector('.plogo img');
+    var brand="";
+    if(logoImg){brand=(logoImg.getAttribute('alt')||"").replace(/\s*logo\s*/i,"").trim();}
+    // Grade from URL path: /p/a1/... /p/a2/... /p/a3/...
+    var grade="";
+    var gm=href.match(/\/p\/(a[123])\//i);
+    if(gm)grade=gm[1].toUpperCase();
+    // Clean title: strip "Refurbished " prefix and SKU codes
+    var title=rawTitle.replace(/^Refurbished\s+/i,"").trim();
+    // Remove inline SKU (e.g. "electriQ eiQMOBISOLO25BLACK Built In...")
+    // The SKU is usually the second word if it's all-caps/mixed with numbers
+    var words=title.split(/\s+/);
+    if(words.length>2&&/^[A-Z0-9]{6,}$/i.test(words[1])){
+      words.splice(1,1);
+      title=words.join(" ");
+    }
+    // Build handle from href slug
+    var handle="";
+    var hm=href.match(/\/p\/[^/]+\/[^/]+\/(.+?)$/);
+    if(hm)handle=hm[1].split("?")[0];
+    if(!handle)handle=title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+    products.push({
+      title:title,
+      handle:handle,
+      description:(grade?"Grade "+grade+". ":"")+(brand?brand+". ":"")+rawTitle,
+      variant_price:price.toFixed(2),
+      images:imgSrc?[imgSrc]:[],
+      vendor:brand||"Appliances Direct",
+      tags:["refurbished",grade?("grade-"+grade.toLowerCase()):"",brand?brand.toLowerCase():""].filter(Boolean).join(","),
+      url:href,
+      sku:pid,
+      quantity:1
+    });
+  });
+  return products;
+}
+
 // ── Shopify JSON extractor ──
 function extractShopifyProduct(p, collectionName){
   var title=p.title||"";
@@ -825,6 +883,23 @@ function findCategories(doc){
 
 // ── Find next page link ──
 function findNextPage(doc){
+  if(PLATFORM==="appliancesdirect"){
+    // AD uses .pagination or numbered page links
+    var nx=doc.querySelector('.pagination a.next,.pagination a[rel="next"],a.paging-next');
+    if(nx)return nx.href||null;
+    // Try numbered pagination: find current page and look for next
+    var pLinks=doc.querySelectorAll('.pagination a,a[href*="pn="],a[href*="page="]');
+    var curPage=1;var nextUrl=null;
+    var pm=location.search.match(/(?:pn|page)=([0-9]+)/);
+    if(pm)curPage=parseInt(pm[1]);
+    pLinks.forEach(function(a){
+      var txt=(a.textContent||"").trim();
+      var hm=(a.href||"").match(/(?:pn|page)=([0-9]+)/);
+      if(hm&&parseInt(hm[1])===curPage+1)nextUrl=a.href;
+      if(!nextUrl&&(txt==="Next"||txt===">"||txt==="\u203A"))nextUrl=a.href||null;
+    });
+    return nextUrl;
+  }
   if(PLATFORM==="bigcommerce"){
     var nx=doc.querySelector('.pagination-item--next a,a.pagination-link--next');
     return nx?(nx.href||null):null;
@@ -876,6 +951,26 @@ if(PLATFORM==="shopify"){
       count++;
     }
   });
+}else if(PLATFORM==="appliancesdirect"){
+  _status('<span style="color:#fb923c">\u25B6</span> Appliances Direct detected - extracting from listing page...');
+  var curUrl=location.href;var pg=0;
+  while(curUrl&&pg<50){
+    pg++;
+    _status('<div style="display:flex;align-items:center;gap:10px"><span style="color:#fb923c">\u25B6</span> Scanning page '+pg+'... ('+window.__scrapedProducts.length+' products found)</div>');
+    var doc=(pg===1)?document:null;
+    if(!doc){try{doc=await fetchDoc(curUrl);}catch(e){console.log("Fetch error page "+pg+":",e.message);break;}}
+    var pageProds=extractADProducts(doc);
+    if(pageProds.length===0)break;
+    pageProds.forEach(function(p){
+      if(window.__scrapedProducts.length>=MAX)return;
+      if(window.__stopScraper)return;
+      window.__scrapedProducts.push(p);
+    });
+    _total=window.__scrapedProducts.length;
+    if(window.__stopScraper||window.__scrapedProducts.length>=MAX)break;
+    curUrl=findNextPage(doc);
+    if(curUrl)await wait(800);
+  }
 }else{
   var allUrls=[];var curUrl=location.href;var pg=0;
   while(curUrl&&pg<30){
