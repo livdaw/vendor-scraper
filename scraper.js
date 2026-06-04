@@ -641,6 +641,118 @@ function extractADProducts(doc){
   return products;
 }
 
+// ── Enrich AD product by visiting its detail page ──
+function enrichADProduct(product, doc){
+  if(!doc)return product;
+  // 1. Gallery images: collect all product images from the page
+  var imgs=[];
+  var seen={};
+  // Primary large image
+  var mainImg=doc.querySelector('#mainImage img,#productImage img,.product-image img,.mainImage img,img.productImage');
+  if(mainImg){
+    var s=mainImg.getAttribute('data-src')||mainImg.getAttribute('src')||"";
+    if(s&&s.indexOf("data:image")<0){
+      s=s.split("?")[0];
+      if(s.indexOf("http")!==0&&s.indexOf("/")===0)s=location.origin+s;
+      if(!seen[s]){seen[s]=1;imgs.push(s);}
+    }
+  }
+  // Thumbnail gallery images (the carousel at bottom of AD pages)
+  doc.querySelectorAll('.product-thumbnails img,.thumbnails img,.altImages img,#thumbnails img,.thumb-list img,.imageGallery img,img[data-large],img[data-zoom],a[data-image] img,#altViews img,.alt-images img,.prdImage img').forEach(function(img){
+    var s=img.getAttribute('data-large')||img.getAttribute('data-zoom')||img.getAttribute('data-src')||img.getAttribute('src')||"";
+    if(!s||s.indexOf("data:image")===0)return;
+    // Try to get full-size version: replace _Thumbnail/_Classic with _Supersize
+    s=s.replace(/_Thumbnail\./,"_Supersize.").replace(/_Classic\./,"_Supersize.").replace(/_Small\./,"_Supersize.");
+    s=s.split("?")[0];
+    if(s.indexOf("http")!==0&&s.indexOf("/")===0)s=location.origin+s;
+    if(!seen[s]){seen[s]=1;imgs.push(s);}
+  });
+  // Also try any image with /Images/ in src that looks like product photos
+  if(imgs.length<2){
+    doc.querySelectorAll('img[src*="/Images/"],img[data-src*="/Images/"]').forEach(function(img){
+      var s=img.getAttribute('data-src')||img.getAttribute('src')||"";
+      if(!s||s.indexOf("data:image")===0||s.indexOf("logo")>=0||s.indexOf("icon")>=0||s.indexOf("banner")>=0)return;
+      s=s.split("?")[0];
+      if(s.indexOf("http")!==0&&s.indexOf("/")===0)s=location.origin+s;
+      if(!seen[s]){seen[s]=1;imgs.push(s);}
+    });
+  }
+  if(imgs.length>0){product.images=imgs;product.thumbnail=imgs[0];}
+
+  // 2. Dimensions from "Why buy me" / spec lists / feature bullets
+  var specText="";
+  doc.querySelectorAll('.product-features li,.product-specifications li,.whyBuyMe li,.productInfo li,#specTable td,#productSpec td,.featureBullets li,ul.features li,.wbm-list li,.why-buy li').forEach(function(el){
+    specText+=" "+el.textContent;
+  });
+  // Also scan any table rows for specs
+  doc.querySelectorAll('table tr,.specificationTable tr').forEach(function(row){
+    var cells=row.querySelectorAll('td,th');
+    cells.forEach(function(c){specText+=" "+c.textContent;});
+  });
+  // Also grab all text from the main product content area
+  var contentEl=doc.querySelector('.product-detail,.productDetail,#productContent,.product-content,.prodInfoContent');
+  if(contentEl)specText+=" "+contentEl.textContent;
+  specText=specText.toLowerCase();
+
+  // Parse WxDxH or Width/Height/Depth
+  var dimPatterns=[
+    /(?:wxdxh|w\s*x\s*d\s*x\s*h)\s*[-:]\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?\s*x\s*([\d.]+)\s*(?:mm|cm)?/i,
+    /(\d+)\s*(?:mm)?\s*(?:\(w\))\s*x\s*(\d+)\s*(?:mm)?\s*(?:\(d\))\s*x\s*(\d+)\s*(?:mm)?\s*(?:\(h\))/i
+  ];
+  for(var di=0;di<dimPatterns.length;di++){
+    var dm=specText.match(dimPatterns[di]);
+    if(dm){
+      product.width=dm[1];product.depth=dm[2];product.height=dm[3];
+      break;
+    }
+  }
+  // Try individual dimension fields
+  if(!product.width){
+    var wm=specText.match(/(?:width|wide)\s*[-:]\s*([\d.]+)\s*(?:mm|cm)?/i);
+    if(wm)product.width=wm[1];
+  }
+  if(!product.height){
+    var hm=specText.match(/(?:height|tall|high)\s*[-:]\s*([\d.]+)\s*(?:mm|cm)?/i);
+    if(hm)product.height=hm[1];
+  }
+  if(!product.depth){
+    var dm2=specText.match(/(?:depth|deep)\s*[-:]\s*([\d.]+)\s*(?:mm|cm)?/i);
+    if(dm2)product.depth=dm2[1];
+  }
+  // Weight
+  if(!product.weight){
+    var wt=specText.match(/(?:weight)\s*[-:]\s*([\d.]+)\s*(?:kg|g)?/i);
+    if(wt)product.weight=wt[1];
+  }
+  // Color detection
+  var colorMatch=specText.match(/(?:colou?r|finish)\s*[-:]\s*((?:matt?\s*)?(?:black|white|grey|gray|silver|chrome|brass|gold|copper|stainless\s*steel|cream|blue|red|green))/i);
+  if(colorMatch)product.color=colorMatch[1].trim();
+  if(!product.color){
+    // Try from title
+    var tc=product.title.toLowerCase();
+    if(/\bmatt?\s*black\b/.test(tc)||/\bblack\b/.test(tc))product.color="Black";
+    else if(/\bwhite\b/.test(tc))product.color="White";
+    else if(/\bgrey\b|\bgray\b/.test(tc))product.color="Grey";
+  }
+
+  // 3. Better description: grab feature bullets
+  var features=[];
+  doc.querySelectorAll('.product-features li,.whyBuyMe li,.wbm-list li,.why-buy li,ul.features li,.featureBullets li').forEach(function(li){
+    var t=li.textContent.trim();
+    if(t&&t.length>3&&t.length<200)features.push(t);
+  });
+  if(features.length>0){
+    product.specFeatures=features;
+    // Append features to description
+    product.description=(product.description||"")+" | "+features.join(" | ");
+  }
+  // 4. Warranty: check if page mentions warranty
+  var fullText=(doc.body?doc.body.textContent:"").toLowerCase();
+  product.hasWarranty=/warranty|guaranteed|guarantee/.test(fullText);
+
+  return product;
+}
+
 // ── Shopify JSON extractor ──
 function extractShopifyProduct(p, collectionName){
   var title=p.title||"";
@@ -896,20 +1008,36 @@ function findCategories(doc){
 // ── Find next page link ──
 function findNextPage(doc){
   if(PLATFORM==="appliancesdirect"){
-    // AD uses .pagination or numbered page links
-    var nx=doc.querySelector('.pagination a.next,.pagination a[rel="next"],a.paging-next');
-    if(nx)return nx.href||null;
-    // Try numbered pagination: find current page and look for next
-    var pLinks=doc.querySelectorAll('.pagination a,a[href*="pn="],a[href*="page="]');
+    // AD uses numbered page links with > arrow for next
+    var origin=location.origin;
+    function resolveUrl(h){if(!h)return null;if(h.indexOf("http")===0)return h;if(h.indexOf("/")===0)return origin+h;return origin+"/"+h;}
+    // Try explicit next-page links first
+    var nx=doc.querySelector('.pagination a.next,.pagination a[rel="next"],a.paging-next,.pager a.next,a[aria-label="Next"],a[title="Next page"],a[title="Next"]');
+    if(nx)return resolveUrl(nx.getAttribute("href"))||null;
+    // Try all pagination-area links for numbered pages or ">" text
+    var pLinks=doc.querySelectorAll('.pagination a,.pager a,.paginator a,a[href*="pn="],a[href*="page="],a[href*="/page/"]');
     var curPage=1;var nextUrl=null;
-    var pm=location.search.match(/(?:pn|page)=([0-9]+)/);
+    // Detect current page from URL or active element
+    var pm=(location.href).match(/(?:pn|page)[=/]([0-9]+)/);
     if(pm)curPage=parseInt(pm[1]);
+    var activeEl=doc.querySelector('.pagination .active,.pagination .current,.pager .active,a.paging-active');
+    if(activeEl){var av=parseInt(activeEl.textContent);if(!isNaN(av))curPage=av;}
     pLinks.forEach(function(a){
       var txt=(a.textContent||"").trim();
-      var hm=(a.href||"").match(/(?:pn|page)=([0-9]+)/);
-      if(hm&&parseInt(hm[1])===curPage+1)nextUrl=a.href;
-      if(!nextUrl&&(txt==="Next"||txt===">"||txt==="\u203A"))nextUrl=a.href||null;
+      var href=a.getAttribute("href")||"";
+      // Match numbered link for curPage+1
+      var hm=href.match(/(?:pn|page)[=/]([0-9]+)/);
+      if(hm&&parseInt(hm[1])===curPage+1)nextUrl=resolveUrl(href);
+      // Match ">" or "›" or "Next" or "»" text
+      if(!nextUrl&&/^(>|›|»|Next|next|NEXT)$/.test(txt))nextUrl=resolveUrl(href);
     });
+    // If numbered pagination found nothing, try incrementing page param in current URL
+    if(!nextUrl&&curPage>=1){
+      var baseUrl=location.href.replace(/([?&])(?:pn|page)=[0-9]+/,"$1page="+(curPage+1));
+      if(baseUrl===location.href)baseUrl+=(location.href.indexOf("?")>=0?"&":"?")+"page="+(curPage+1);
+      // Only use this if there are more products (check if current page had a full set)
+      nextUrl=null; // Don't auto-increment blindly, rely on actual links
+    }
     return nextUrl;
   }
   if(PLATFORM==="bigcommerce"){
@@ -944,6 +1072,20 @@ var SKIP_SOLD=true;
 var DELAY=800;
 
 try{
+// ── Margin / Markup Calculator ──
+var _marginPct=0;var _markupMult=1;var _markupPct=0;
+var marginInput=prompt("Margin % to apply to prices?\\n\\n• Enter a number (e.g. 13 for 13% margin)\\n• Leave blank / cancel for no markup\\n\\nMargin = (Sell - Cost) / Sell\\nMarkup is calculated automatically.","0");
+if(marginInput&&marginInput.trim()!==""){
+  _marginPct=parseFloat(marginInput);
+  if(!isNaN(_marginPct)&&_marginPct>0&&_marginPct<100){
+    _markupMult=1/(1-_marginPct/100);
+    _markupPct=((_markupMult-1)*100);
+    _status('<span style="color:#fbbf24">\u25B6</span> Margin: <strong>'+_marginPct.toFixed(1)+'%</strong> \u2192 Markup: <strong>'+_markupPct.toFixed(2)+'%</strong> (multiplier: '+_markupMult.toFixed(4)+')');
+    await wait(1500);
+  }else{_marginPct=0;_markupMult=1;_markupPct=0;}
+}
+window.__marginPct=_marginPct;window.__markupMult=_markupMult;
+
 if(PLATFORM==="shopify"){
   _status('<span style="color:#a855f7">\u25B6</span> Shopify detected - using JSON API...');
   var collUrl=location.href;
@@ -964,24 +1106,47 @@ if(PLATFORM==="shopify"){
     }
   });
 }else if(PLATFORM==="appliancesdirect"){
-  _status('<span style="color:#fb923c">\u25B6</span> Appliances Direct detected - extracting from listing page...');
-  var curUrl=location.href;var pg=0;
-  while(curUrl&&pg<50){
+  // Ask user how many products to scrape
+  var adLimit=prompt("How many products to scrape?\\n\\n• Enter a number (e.g. 100, 500)\\n• Enter 'all' for every page\\n• Leave blank / cancel for this page only","all");
+  var adMax=9999;var adPagesOnly=false;
+  if(!adLimit||adLimit.trim()===""){adMax=999;adPagesOnly=true;}
+  else if(adLimit.trim().toLowerCase()==="all"){adMax=99999;}
+  else{var n=parseInt(adLimit);if(!isNaN(n)&&n>0)adMax=n;else{adMax=999;adPagesOnly=true;}}
+  _status('<span style="color:#fb923c">\u25B6</span> Appliances Direct – scraping '+(adPagesOnly?'this page only':adMax>=99999?'ALL pages':'up to '+adMax+' products')+'...');
+  var adAllProducts=[];var curUrl=location.href;var pg=0;
+  // Phase 1: Collect products from listing pages
+  while(curUrl&&pg<200){
     pg++;
-    _status('<div style="display:flex;align-items:center;gap:10px"><span style="color:#fb923c">\u25B6</span> Scanning page '+pg+'... ('+window.__scrapedProducts.length+' products found)</div>');
+    _status('<div style="display:flex;align-items:center;gap:10px"><span style="color:#fb923c">\u25B6</span> Scanning page '+pg+'... ('+adAllProducts.length+' products found)</div>');
     var doc=(pg===1)?document:null;
     if(!doc){try{doc=await fetchDoc(curUrl);}catch(e){console.log("Fetch error page "+pg+":",e.message);break;}}
     var pageProds=extractADProducts(doc);
     if(pageProds.length===0)break;
     pageProds.forEach(function(p){
-      if(window.__scrapedProducts.length>=MAX)return;
+      if(adAllProducts.length>=adMax)return;
       if(window.__stopScraper)return;
-      window.__scrapedProducts.push(p);
+      adAllProducts.push(p);
     });
-    _total=window.__scrapedProducts.length;
-    if(window.__stopScraper||window.__scrapedProducts.length>=MAX)break;
+    if(window.__stopScraper||adAllProducts.length>=adMax)break;
+    if(adPagesOnly)break; // Only scrape the current page
     curUrl=findNextPage(doc);
     if(curUrl)await wait(800);
+  }
+  // Phase 2: Visit each product page for images, dimensions, specs
+  _total=adAllProducts.length;
+  _status('<span style="color:#fb923c">\u25B6</span> Found '+adAllProducts.length+' products. Now visiting each product page for images & specs...');
+  for(var ai=0;ai<adAllProducts.length;ai++){
+    if(window.__stopScraper)break;
+    var ap=adAllProducts[ai];
+    _status('<div style="display:flex;align-items:center;gap:10px"><span style="color:#fb923c">\u25B6</span> Enriching '+(ai+1)+'/'+adAllProducts.length+': '+ap.title.substring(0,50)+'...</div>');
+    if(ap.url){
+      try{
+        var pdoc=await fetchDoc(ap.url);
+        enrichADProduct(ap,pdoc);
+      }catch(e){console.log("Enrich error "+ap.title+":",e.message);}
+      await wait(600);
+    }
+    window.__scrapedProducts.push(ap);
   }
 }else{
   var allUrls=[];var curUrl=location.href;var pg=0;
@@ -1019,14 +1184,22 @@ if(PLATFORM==="shopify"){
 // ── Done ──
 clearInterval(_pi);
 window.__scraperRunning=false;
+// Apply margin/markup to all prices
+if(_markupMult>1){
+  window.__scrapedProducts.forEach(function(p){
+    if(p.price&&p.price>0)p.price=Math.round(p.price*_markupMult*100)/100;
+    if(p.variant_price&&p.variant_price>0)p.variant_price=Math.round(p.variant_price*_markupMult*100)/100;
+  });
+}
 var total=window.__scrapedProducts.length;
 if(total>0){
+  var marginNote=_marginPct>0?' <span style="color:#fbbf24">('+_marginPct+'% margin / '+_markupPct.toFixed(1)+'% markup applied)</span>':'';
   var j=JSON.stringify(window.__scrapedProducts);
   try{
     await navigator.clipboard.writeText(j);
-    _status('<span style="color:#34d399">\u2714</span> Done! <strong>'+total+'</strong> products copied to clipboard. Paste into Scraper Tool with Ctrl+V. &nbsp;<a onclick="this.parentElement.remove()" style="color:#8b8fa3;cursor:pointer;text-decoration:underline">Dismiss</a>');
+    _status('<span style="color:#34d399">\u2714</span> Done! <strong>'+total+'</strong> products copied to clipboard.'+marginNote+' Paste into Scraper Tool with Ctrl+V. &nbsp;<a onclick="this.parentElement.remove()" style="color:#8b8fa3;cursor:pointer;text-decoration:underline">Dismiss</a>');
   }catch(e){
-    _status('<span style="color:#34d399">\u2714</span> Done! <strong>'+total+'</strong> products. Run: <code style="background:#242836;padding:2px 6px;border-radius:3px">copy(JSON.stringify(window.__scrapedProducts))</code> &nbsp;<a onclick="this.parentElement.remove()" style="color:#8b8fa3;cursor:pointer;text-decoration:underline">Dismiss</a>');
+    _status('<span style="color:#34d399">\u2714</span> Done! <strong>'+total+'</strong> products.'+marginNote+' Run: <code style="background:#242836;padding:2px 6px;border-radius:3px">copy(JSON.stringify(window.__scrapedProducts))</code> &nbsp;<a onclick="this.parentElement.remove()" style="color:#8b8fa3;cursor:pointer;text-decoration:underline">Dismiss</a>');
   }
 }else{
   _status('<span style="color:#f87171">\u274C</span> No products found. Make sure you are on a category/collection page. &nbsp;<a onclick="this.parentElement.remove()" style="color:#8b8fa3;cursor:pointer;text-decoration:underline">Dismiss</a>');
