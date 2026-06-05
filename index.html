@@ -764,6 +764,65 @@ function findShopifyCollections(doc){
   return Object.keys(cols).map(function(u){return{url:u,name:cols[u]};});
 }
 
+// ── WooCommerce Store API (for JS-rendered Woo sites where DOM scraping fails) ──
+function extractWooApiProduct(p){
+  if(!p||!p.name)return null;
+  var minor=(p.prices&&p.prices.currency_minor_unit!=null)?p.prices.currency_minor_unit:2;
+  var rawPrice=p.prices?(p.prices.price||p.prices.regular_price||"0"):"0";
+  var price=parseFloat(rawPrice)/Math.pow(10,minor);
+  if(isNaN(price))price=0;
+  var seen={},imgs=[];
+  (p.images||[]).forEach(function(im){var s=im&&im.src||"";if(s&&!seen[s]){seen[s]=1;imgs.push(s);}});
+  imgs=imgs.slice(0,10);
+  var attrs={};
+  (p.attributes||[]).forEach(function(a){
+    var name=(a.name||"").replace(/\\s*:\\s*$/,"").trim();
+    var vals=(a.terms||[]).map(function(t){return t.name;}).filter(function(v){return v&&!/^\\s*\\[/.test(v);});
+    if(name&&vals.length)attrs[name]=vals.join(", ");
+  });
+  var brand="";
+  if(p.brands&&p.brands.length)brand=p.brands[0].name||"";
+  if(!brand&&p.short_description){var sd=p.short_description.replace(/<[^>]+>/g," ").replace(/\\s+/g," ").trim();if(sd&&sd.length<40)brand=sd;}
+  var qty=0;
+  if(p.add_to_cart&&p.add_to_cart.maximum)qty=parseInt(p.add_to_cart.maximum)||0;
+  if(!qty&&p.stock_availability&&p.stock_availability.text){var sm=p.stock_availability.text.match(/[\\d,]+/);if(sm)qty=parseInt(sm[0].replace(/,/g,""))||0;}
+  if(!qty&&p.is_in_stock)qty=1;
+  var desc=(p.description||"").replace(/<[^>]+>/g," ").replace(/&amp;/g,"&").replace(/&nbsp;/g," ").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/\\s+/g," ").trim();
+  var specBits=[];
+  ["Dimensions","Undercoat","Min. Order Qty","Carbon Savings"].forEach(function(k){
+    Object.keys(attrs).forEach(function(ak){if(ak.toLowerCase().indexOf(k.toLowerCase())>=0)specBits.push(k+": "+attrs[ak]);});
+  });
+  if(p.stock_availability&&p.stock_availability.text)specBits.push("Stock: "+p.stock_availability.text);
+  if(specBits.length)desc=(desc?desc+" ":"")+specBits.join(". ")+".";
+  var dims={};
+  var dimAttr="";Object.keys(attrs).forEach(function(ak){if(ak.toLowerCase().indexOf("dimension")>=0)dimAttr=attrs[ak];});
+  if(dimAttr){var dm=dimAttr.match(/([\\d.]+)\\s*x\\s*([\\d.]+)/i);if(dm){dims.width=dm[1]+"cm";dims.length=dm[2]+"cm";}}
+  var brandCat=brand?(brand+" "):"";
+  return{
+    title:p.name||"",description:desc,price:price,url:p.permalink||location.origin,
+    images:imgs,thumbnail:imgs[0]||"",sku:p.sku||"",weight:"",dimensions:dims,tags:[],
+    variants:[{title:"Default",sku:p.sku||"",price:price}],quantity:qty,
+    vendorCategory:brandCat+"Carpet Tiles",manufacturer:brand,vendor:brand,condition:"Refurbished"
+  };
+}
+async function fetchWooStoreProducts(){
+  var all=[];var page=1;var per=100;var maxPages=50;
+  while(page<=maxPages){
+    var url=location.origin+"/wp-json/wc/store/v1/products?per_page="+per+"&page="+page;
+    console.log("  Fetching Store API page "+page+"... ("+all.length+" products)");
+    try{
+      var resp=await fetch(url,{credentials:"include"});
+      if(!resp.ok){if(page===1)return [];break;}
+      var data=await resp.json();
+      if(!Array.isArray(data)||!data.length)break;
+      all=all.concat(data);
+      if(data.length<per)break;
+      page++;await wait(300);
+    }catch(e){console.log("  Woo Store API page "+page+" error: "+e.message);if(page===1)return [];break;}
+  }
+  return all;
+}
+
 function extract(doc,url){
   if(PLATFORM==="bigcommerce")return extractBC(doc,url);
   if(PLATFORM==="brothers")return extractBrothers(doc,url);
@@ -1027,6 +1086,10 @@ if(PLATFORM==="shopify"){
   console.log("\\n=== COMPLETE ===");
   console.log("Total products: "+window.__scrapedProducts.length);
   console.log("\\nTo copy: copy(JSON.stringify(window.__scrapedProducts))");
+} else if(PLATFORM==="woocommerce" && (await (async function(){var wp=await fetchWooStoreProducts();if(wp&&wp.length){var c=0;wp.forEach(function(x){if(c>=MAX)return;var p=extractWooApiProduct(x);if(p&&p.title){if(SKIP_SOLD&&p.quantity===0)return;window.__scrapedProducts.push(p);c++;}});console.log("Woo Store API: scraped "+c+" of "+wp.length+" products");return true;}return false;})())){
+  console.log("\\n=== COMPLETE ===");
+  console.log("Total products: "+window.__scrapedProducts.length);
+  console.log("\\nTo copy: copy(JSON.stringify(window.__scrapedProducts))");
 } else {
 // Non-Shopify full site scraper
 console.log("=== FULL SITE SCRAPER ===");
@@ -1118,6 +1181,9 @@ if(PLATFORM==="shopify"){
   });
   console.log("Done! "+window.__scrapedProducts.length+" products.");
   console.log("To copy: copy(JSON.stringify(window.__scrapedProducts))");
+} else if(PLATFORM==="woocommerce" && (await (async function(){var wp=await fetchWooStoreProducts();if(wp&&wp.length){var c=0;wp.forEach(function(x){if(c>=MAX)return;var p=extractWooApiProduct(x);if(p&&p.title){if(SKIP_SOLD&&p.quantity===0)return;window.__scrapedProducts.push(p);c++;}});console.log("Woo Store API: scraped "+c+" of "+wp.length+" products");return true;}return false;})())){
+  console.log("Done! "+window.__scrapedProducts.length+" products.");
+  console.log("To copy: copy(JSON.stringify(window.__scrapedProducts))");
 } else {
 console.log("Starting scraper...");
 var allUrls=[];var curUrl="${url.replace(/"/g,'\\"')}";var pg=0;
@@ -1188,6 +1254,9 @@ var VALID_MATERIALS=["Aluminum","Bitumen","Brick","Carpet","Ceramic","Concrete",
 
 function guessCategory(p){
   var vc=(p.vendorCategory||'').toLowerCase();
+  // Carpet tiles / flooring (check before the generic "tile"->roofing map)
+  var blob=(vc+' '+(p.title||'')+' '+(p.description||'')).toLowerCase();
+  if(blob.indexOf('carpet')>=0||blob.indexOf('flooring')>=0)return 'flooring';
   if(vc){for(var i=0;i<CATEGORY_MAP.length;i++){var c=CATEGORY_MAP[i];for(var j=0;j<c.k.length;j++){if(vc.indexOf(c.k[j])>=0)return c.h;}}}
   var urlPath=(p.url||'').toLowerCase();
   if(urlPath.indexOf('/brick')>=0)return 'bricks';

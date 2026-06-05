@@ -860,6 +860,86 @@ function findShopifyCollections(doc){
   return Object.keys(cols).map(function(u){return{url:u,name:cols[u]};});
 }
 
+// ── WooCommerce Store API (for JS-rendered Woo sites where DOM scraping fails) ──
+// Returns the internal product shape (price in DECIMAL POUNDS; index.html re-multiplies by 100).
+function extractWooApiProduct(p){
+  if(!p||!p.name)return null;
+  // price: Store API returns minor units (pence). Convert to decimal pounds.
+  var minor=(p.prices&&p.prices.currency_minor_unit!=null)?p.prices.currency_minor_unit:2;
+  var rawPrice=p.prices?(p.prices.price||p.prices.regular_price||"0"):"0";
+  var price=parseFloat(rawPrice)/Math.pow(10,minor);
+  if(isNaN(price))price=0;
+  // images: unique full-size src (the API repeats the primary image)
+  var seen={},imgs=[];
+  (p.images||[]).forEach(function(im){var s=im&&im.src||"";if(s&&!seen[s]){seen[s]=1;imgs.push(s);}});
+  imgs=imgs.slice(0,10);
+  // attributes -> {name:value}; drop junk values like ["10"]
+  var attrs={};
+  (p.attributes||[]).forEach(function(a){
+    var name=(a.name||"").replace(/\s*:\s*$/,"").trim();
+    var vals=(a.terms||[]).map(function(t){return t.name;}).filter(function(v){return v&&!/^\s*\[/.test(v);});
+    if(name&&vals.length)attrs[name]=vals.join(", ");
+  });
+  // brand: prefer brands[], else short_description (Encore puts brand there)
+  var brand="";
+  if(p.brands&&p.brands.length)brand=p.brands[0].name||"";
+  if(!brand&&p.short_description){var sd=p.short_description.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim();if(sd&&sd.length<40)brand=sd;}
+  // stock quantity
+  var qty=0;
+  if(p.add_to_cart&&p.add_to_cart.maximum)qty=parseInt(p.add_to_cart.maximum)||0;
+  if(!qty&&p.stock_availability&&p.stock_availability.text){var sm=p.stock_availability.text.match(/[\d,]+/);if(sm)qty=parseInt(sm[0].replace(/,/g,""))||0;}
+  if(!qty&&p.is_in_stock)qty=1;
+  // description: strip HTML, then append captured spec attributes + stock
+  var desc=(p.description||"").replace(/<[^>]+>/g," ").replace(/&amp;/g,"&").replace(/&nbsp;/g," ").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/\s+/g," ").trim();
+  var specBits=[];
+  ["Dimensions","Undercoat","Min. Order Qty","Carbon Savings"].forEach(function(k){
+    Object.keys(attrs).forEach(function(ak){if(ak.toLowerCase().indexOf(k.toLowerCase())>=0)specBits.push(k+": "+attrs[ak]);});
+  });
+  if(p.stock_availability&&p.stock_availability.text)specBits.push("Stock: "+p.stock_availability.text);
+  if(specBits.length)desc=(desc?desc+" ":"")+specBits.join(". ")+".";
+  // dimensions from a "50x50" style attribute (carpet tile face size, in cm)
+  var dims={};
+  var dimAttr="";Object.keys(attrs).forEach(function(ak){if(ak.toLowerCase().indexOf("dimension")>=0)dimAttr=attrs[ak];});
+  if(dimAttr){var dm=dimAttr.match(/([\d.]+)\s*x\s*([\d.]+)/i);if(dm){dims.width=dm[1]+"cm";dims.length=dm[2]+"cm";}}
+  var brandCat=brand?(brand+" "):"";
+  return{
+    title:p.name||"",
+    description:desc,
+    price:price,
+    url:p.permalink||location.origin,
+    images:imgs,thumbnail:imgs[0]||"",
+    sku:p.sku||"",
+    weight:"",dimensions:dims,
+    tags:[],
+    variants:[{title:"Default",sku:p.sku||"",price:price}],
+    quantity:qty,
+    vendorCategory:brandCat+"Carpet Tiles",
+    manufacturer:brand,
+    vendor:brand,
+    condition:"Refurbished"
+  };
+}
+
+// Pages through the WooCommerce Store API. Returns [] if unavailable (caller falls back to DOM).
+async function fetchWooStoreProducts(){
+  var all=[];var page=1;var per=100;var maxPages=50;
+  while(page<=maxPages){
+    var url=location.origin+"/wp-json/wc/store/v1/products?per_page="+per+"&page="+page;
+    _status('<span style="color:#6c72ff">▶</span> Fetching Store API page '+page+'... ('+all.length+' products)');
+    try{
+      var resp=await fetch(url,{credentials:"include"});
+      if(!resp.ok){if(page===1)return [];break;}
+      var data=await resp.json();
+      if(!Array.isArray(data)||!data.length)break;
+      all=all.concat(data);
+      if(data.length<per)break;
+      page++;
+      await wait(300);
+    }catch(e){console.log("  Woo Store API page "+page+" error: "+e.message);if(page===1)return [];break;}
+  }
+  return all;
+}
+
 function extract(doc,url){
   if(PLATFORM==="bigcommerce")return extractBC(doc,url);
   if(PLATFORM==="brothers")return extractBrothers(doc,url);
@@ -1193,6 +1273,29 @@ if(PLATFORM==="shopify"){
     window.__scrapedProducts.push(ap);
   }
 }else{
+  // WooCommerce: try the Store API first (works on JS-rendered sites where DOM scraping fails)
+  var usedWooApi=false;
+  if(PLATFORM==="woocommerce"){
+    try{
+      _status('<span style="color:#6c72ff">▶</span> WooCommerce detected - trying Store API...');
+      var wooProds=await fetchWooStoreProducts();
+      if(wooProds&&wooProds.length){
+        usedWooApi=true;
+        _total=wooProds.length;_phase="scraping";
+        var _wc=0;
+        wooProds.forEach(function(wp){
+          if(_wc>=MAX)return;
+          var p=extractWooApiProduct(wp);
+          if(p&&p.title){
+            if(SKIP_SOLD&&p.quantity===0)return;
+            window.__scrapedProducts.push(p);_wc++;
+          }
+        });
+        console.log("Woo Store API: scraped "+_wc+" of "+wooProds.length+" products");
+      }
+    }catch(e){console.log("Woo Store API failed, falling back to DOM:",e.message);usedWooApi=false;}
+  }
+  if(!usedWooApi){
   var allUrls=[];var curUrl=location.href;var pg=0;
   while(curUrl&&pg<30){
     pg++;
@@ -1219,6 +1322,7 @@ if(PLATFORM==="shopify"){
       }
     }catch(e){console.log("Error:",e.message);}
     await wait(DELAY);
+  }
   }
 }
 }catch(err){
