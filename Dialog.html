@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:14px;color:#222}
+  p{font-size:13px;color:#555;margin:0 0 8px}
+  textarea{width:100%;height:250px;box-sizing:border-box;font-family:Menlo,Consolas,monospace;
+    font-size:11px;border:1px solid #ccc;border-radius:6px;padding:8px;resize:vertical}
+  .row{margin-top:10px;display:flex;gap:8px;align-items:center}
+  button{background:#137333;color:#fff;border:0;border-radius:6px;padding:9px 16px;
+    font-size:13px;cursor:pointer}
+  button.sec{background:#eee;color:#333}
+  #status{font-size:12px;color:#555}
+  a{color:#137333}
+</style>
+</head>
+<body>
+  <p>Paste the <b>Quote JSON</b> copied from the scraper tool, then click Create.
+     A filled copy of this template is added to the same Drive folder.</p>
+  <textarea id="json" placeholder='{ "quote_number": "...", "line_items": [ ... ] }'></textarea>
+  <div class="row">
+    <button onclick="run()">Create quote</button>
+    <button class="sec" onclick="google.script.host.close()">Cancel</button>
+    <span id="status"></span>
+  </div>
+<script>
+  function run() {
+    var s = document.getElementById('status');
+    var txt = document.getElementById('json').value.trim();
+    if (!txt) { s.textContent = 'Paste the JSON first.'; return; }
+    try { JSON.parse(txt); } catch (e) { s.textContent = 'That is not valid JSON.'; return; }
+    s.textContent = 'Building…';
+    google.script.run
+      .withSuccessHandler(function (r) {
+        s.innerHTML = 'Done: <a href="' + r.url + '" target="_blank">' + r.name + '</a>';
+      })
+      .withFailureHandler(function (err) { s.textContent = 'Error: ' + err.message; })
+      .buildQuote(txt);
+  }
+</script>
+</body>
+</html>

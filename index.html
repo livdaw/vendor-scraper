@@ -101,6 +101,7 @@ tr.new-row td{animation:flashIn 1.5s ease-out}
         <button class="btn btn-sm" onclick="aiRewrite()" id="aiBtn" disabled style="border-color:rgba(168,85,247,0.4);color:#a855f7">&#x2728; AI Rewrite</button>
         <button class="btn btn-sm" onclick="showApiKeyInput()" id="aiKeyBtn" style="border-color:rgba(168,85,247,0.2);color:var(--dim);font-size:11px">&#x1F511;</button>
         <button class="btn btn-danger btn-sm" onclick="clearAll()" id="clrBtn" disabled>Clear All</button>
+        <button class="btn btn-sm" onclick="openQuote()" id="quoteBtn" disabled style="border-color:rgba(52,211,153,0.5);color:var(--green)">&#x1F4C4; Build Quote (<span id="selCount">0</span>)</button>
         <button class="btn btn-primary" onclick="exportCSV()" id="expBtn" disabled>Export Medusa CSV</button>
       </div>
     </div>
@@ -111,9 +112,56 @@ tr.new-row td{animation:flashIn 1.5s ease-out}
       </div>
     </div>
     <div class="table-wrap" style="max-height:500px;overflow-y:auto">
-      <table><thead><tr><th></th><th>Img</th><th>Title</th><th>Price</th><th>Qty</th><th>Cat</th><th>Description</th><th>SKU</th></tr></thead><tbody id="tBody"></tbody></table>
+      <table><thead><tr><th title="Add to quote">&#x1F4C4;</th><th></th><th>Img</th><th>Title</th><th>Price</th><th>Qty</th><th>Cat</th><th>Description</th><th>SKU</th></tr></thead><tbody id="tBody"></tbody></table>
       <div class="empty" id="emptyMsg">No products yet.</div>
     </div>
+  </div>
+
+  <div id="quotePanel" class="panel hidden" style="border-color:rgba(52,211,153,0.4)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h2 style="margin:0">&#x1F4C4; Build Quote</h2>
+      <button class="btn btn-sm" onclick="document.getElementById('quotePanel').classList.add('hidden')" style="font-size:11px">Close</button>
+    </div>
+    <div class="config-row" style="margin-bottom:8px">
+      <input type="text" id="qNumber" placeholder="Quote number (e.g. MI-2026-014)">
+      <input type="text" id="qPreparedBy" placeholder="Prepared by">
+      <input type="text" id="qDate" placeholder="Quote date (e.g. 8 June 2026)">
+    </div>
+    <div class="config-row" style="margin-bottom:8px">
+      <input type="text" id="qProjectRef" placeholder="Project reference">
+      <input type="text" id="qCustName" placeholder="Customer name">
+      <input type="text" id="qCustEmail" placeholder="Customer email">
+    </div>
+    <div class="config-row" style="margin-bottom:8px">
+      <input type="text" id="qCustCompany" placeholder="Company">
+      <input type="text" id="qCustAddr" placeholder="Customer address">
+      <input type="text" id="qDelivAddr" placeholder="Delivery address (defaults to customer)">
+    </div>
+    <div class="config-row" style="margin-bottom:14px;align-items:center">
+      <input type="text" id="qDelivWeek" placeholder="Delivery w/c (e.g. w/c 22 June)" style="flex:1">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);white-space:nowrap">Default margin %
+        <input type="number" id="qDefMargin" value="0" min="0" max="99" step="0.5" style="width:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px" onchange="applyDefMargin()">
+      </label>
+      <button class="btn btn-sm" onclick="applyDefMargin()" style="font-size:11px">Apply to all</button>
+    </div>
+    <div class="table-wrap" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+      <table style="font-size:12px"><thead><tr>
+        <th>Product</th><th>Vendor</th><th>Condition</th><th>SKU</th>
+        <th style="text-align:right">Cost &pound;</th><th style="text-align:center">Qty</th>
+        <th style="text-align:center">Margin %</th><th style="text-align:right">Unit &pound;</th>
+        <th style="text-align:right">Line &pound;</th><th></th>
+      </tr></thead><tbody id="qBody"></tbody></table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:18px;margin-top:12px;font-size:14px">
+      <span style="color:var(--dim)">Materials total (ex VAT):</span>
+      <strong id="qTotal" style="font-size:18px;color:var(--green)">&pound;0.00</strong>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-primary" onclick="genQuoteJSON()">Generate Quote JSON</button>
+      <button class="btn btn-sm" onclick="copyQuoteJSON()" id="qCopyBtn" disabled>Copy JSON</button>
+      <span style="font-size:11px;color:var(--dim);align-self:center">Paste this into the <strong>Build Quote</strong> menu in your Google Doc template.</span>
+    </div>
+    <textarea id="qJsonOut" class="hidden" style="width:100%;min-height:120px;margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:10px;padding:10px;resize:vertical;outline:none"></textarea>
   </div>
 
   <div style="text-align:center;padding:10px 0;font-size:12px;color:var(--dim)">
@@ -1042,7 +1090,7 @@ function renderTable(isNew){
     var src=p.thumbnail?esc(p.thumbnail):'';
     var cat=p.vendorCategory||'';
     var isSold=!p.quantity||p.quantity===0||p.quantity==='0';
-    return '<tr class="'+(isNew&&i===products.length-1?'new-row':'')+(isSold?' sold-row':'')+'" style="'+(isSold?'opacity:0.5':'')+'"><td><button class="xbtn" onclick="removeProduct('+i+')">x</button></td><td>'+(src?'<img src="'+src+'" onerror="this.style.display=\'none\'">':'')+'</td><td><strong>'+esc(p.title)+'</strong></td><td class="pr">&pound;'+parseFloat(p.price||0).toFixed(2)+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:'+(isSold?'var(--red)':'var(--text)')+'">'+(isSold?'SOLD':(p.quantity||0))+'</td><td style="font-size:11px;color:var(--dim)">'+esc(cat)+'</td><td class="dsc">'+(p._aiRewritten?'<span style="color:#a855f7;font-size:10px">&#x2728;</span> ':'')+esc((p.description||'').substring(0,80))+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+esc(p.sku||'')+'</td></tr>';
+    return '<tr class="'+(isNew&&i===products.length-1?'new-row':'')+(isSold?' sold-row':'')+'" style="'+(isSold?'opacity:0.5':'')+'"><td style="text-align:center"><input type="checkbox" onchange="toggleSel('+i+',this.checked)" '+(p._sel?'checked':'')+' title="Add to quote"></td><td><button class="xbtn" onclick="removeProduct('+i+')">x</button></td><td>'+(src?'<img src="'+src+'" onerror="this.style.display=\'none\'">':'')+'</td><td><strong>'+esc(p.title)+'</strong></td><td class="pr">&pound;'+parseFloat(p.price||0).toFixed(2)+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:'+(isSold?'var(--red)':'var(--text)')+'">'+(isSold?'SOLD':(p.quantity||0))+'</td><td style="font-size:11px;color:var(--dim)">'+esc(cat)+'</td><td class="dsc">'+(p._aiRewritten?'<span style="color:#a855f7;font-size:10px">&#x2728;</span> ':'')+esc((p.description||'').substring(0,80))+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+esc(p.sku||'')+'</td></tr>';
   }).join('');
   if(isNew){var w=tb.closest('.table-wrap');if(w)w.scrollTop=w.scrollHeight;}
 }
@@ -1254,9 +1302,9 @@ var VALID_MATERIALS=["Aluminum","Bitumen","Brick","Carpet","Ceramic","Concrete",
 
 function guessCategory(p){
   var vc=(p.vendorCategory||'').toLowerCase();
-  // Carpet tiles / flooring (check before the generic "tile"->roofing map)
+  // Carpet tiles (check before the generic "tile"->roofing map)
   var blob=(vc+' '+(p.title||'')+' '+(p.description||'')).toLowerCase();
-  if(blob.indexOf('carpet')>=0||blob.indexOf('flooring')>=0)return 'flooring';
+  if(blob.indexOf('carpet')>=0)return 'carpet-and-carpet-tiles';
   if(vc){for(var i=0;i<CATEGORY_MAP.length;i++){var c=CATEGORY_MAP[i];for(var j=0;j<c.k.length;j++){if(vc.indexOf(c.k[j])>=0)return c.h;}}}
   var urlPath=(p.url||'').toLowerCase();
   if(urlPath.indexOf('/brick')>=0)return 'bricks';
@@ -1653,12 +1701,128 @@ function updateTitle(){
   document.title=n?'('+n+') Vendor Scraper':'Vendor Scraper';
 }
 
-// Patch renderTable to update title
+// ══════════════════════════════════════════
+// QUOTE BUILDER
+// ══════════════════════════════════════════
+function vendorOf(p){
+  if(p.vendor)return p.vendor;
+  try{var h=new URL(p.url).hostname.replace(/^www\./,'');return h.split('.')[0];}catch(e){return '';}
+}
+function sellPrice(cost,margin){
+  cost=parseFloat(cost)||0;margin=parseFloat(margin)||0;
+  if(margin<=0)return cost;if(margin>=100)return cost; // margin = (sell-cost)/sell
+  return cost/(1-margin/100);
+}
+function selectedProducts(){return products.filter(function(p){return p._sel;});}
+function updateSelCount(){
+  var n=selectedProducts().length;
+  var sc=document.getElementById('selCount');if(sc)sc.textContent=n;
+  var qb=document.getElementById('quoteBtn');if(qb)qb.disabled=!n;
+}
+function toggleSel(i,checked){
+  if(!products[i])return;
+  products[i]._sel=checked;
+  if(checked){
+    if(products[i]._qty==null)products[i]._qty=parseInt(products[i].quantity,10)>0?parseInt(products[i].quantity,10):1;
+    if(products[i]._margin==null)products[i]._margin=parseFloat(document.getElementById('qDefMargin').value)||0;
+  }
+  save();updateSelCount();
+  if(!document.getElementById('quotePanel').classList.contains('hidden'))renderQuoteLines();
+}
+function openQuote(){
+  if(!selectedProducts().length){toast('Tick some products first','err');return;}
+  var hdr={};try{hdr=JSON.parse(localStorage.getItem('qHdr')||'{}');}catch(e){}
+  ['qNumber','qPreparedBy','qDate','qProjectRef','qCustName','qCustEmail','qCustCompany','qCustAddr','qDelivAddr','qDelivWeek'].forEach(function(id){
+    if(hdr[id]!=null)document.getElementById(id).value=hdr[id];
+  });
+  document.getElementById('quotePanel').classList.remove('hidden');
+  renderQuoteLines();
+  document.getElementById('quotePanel').scrollIntoView({behavior:'smooth'});
+}
+function applyDefMargin(){
+  var m=parseFloat(document.getElementById('qDefMargin').value)||0;
+  selectedProducts().forEach(function(p){p._margin=m;});
+  save();renderQuoteLines();
+}
+function setQ(i,field,val){
+  if(!products[i])return;
+  products[i][field]=field==='_qty'?(parseInt(val,10)||0):(parseFloat(val)||0);
+  save();renderQuoteLines();
+}
+function removeFromQuote(i){products[i]._sel=false;save();updateSelCount();renderTable();renderQuoteLines();}
+function renderQuoteLines(){
+  var sel=products.map(function(p,i){return{p:p,i:i};}).filter(function(o){return o.p._sel;});
+  var tb=document.getElementById('qBody');var total=0;
+  tb.innerHTML=sel.map(function(o){
+    var p=o.p,i=o.i;
+    var cost=parseFloat(p.price)||0;
+    var qty=p._qty!=null?p._qty:1;
+    var margin=p._margin!=null?p._margin:0;
+    var unit=sellPrice(cost,margin);
+    var line=unit*qty;total+=line;
+    return '<tr>'
+      +'<td style="max-width:240px"><strong>'+esc(p.title)+'</strong></td>'
+      +'<td style="color:var(--dim)">'+esc(vendorOf(p))+'</td>'
+      +'<td style="color:var(--dim)">'+esc(p.condition||'')+'</td>'
+      +'<td style="font-family:\'JetBrains Mono\',monospace">'+esc(p.sku||'')+'</td>'
+      +'<td style="text-align:right">'+cost.toFixed(2)+'</td>'
+      +'<td style="text-align:center"><input type="number" min="0" value="'+qty+'" onchange="setQ('+i+',\'_qty\',this.value)" style="width:52px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:4px;font-size:12px;text-align:center"></td>'
+      +'<td style="text-align:center"><input type="number" min="0" max="99" step="0.5" value="'+margin+'" onchange="setQ('+i+',\'_margin\',this.value)" style="width:58px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:4px;font-size:12px;text-align:center"></td>'
+      +'<td style="text-align:right">'+unit.toFixed(2)+'</td>'
+      +'<td style="text-align:right;font-weight:600">'+line.toFixed(2)+'</td>'
+      +'<td><button class="xbtn" onclick="removeFromQuote('+i+')">x</button></td>'
+      +'</tr>';
+  }).join('');
+  document.getElementById('qTotal').textContent='£'+total.toFixed(2);
+}
+function quoteHeader(){
+  var h={};
+  ['qNumber','qPreparedBy','qDate','qProjectRef','qCustName','qCustEmail','qCustCompany','qCustAddr','qDelivAddr','qDelivWeek'].forEach(function(id){h[id]=document.getElementById(id).value.trim();});
+  localStorage.setItem('qHdr',JSON.stringify(h));
+  return h;
+}
+function genQuoteJSON(){
+  var h=quoteHeader();
+  var sel=selectedProducts();
+  if(!sel.length){toast('No products selected','err');return;}
+  var total=0;var skus=[];
+  var items=sel.map(function(p){
+    var cost=parseFloat(p.price)||0;
+    var qty=p._qty!=null?p._qty:1;
+    var margin=p._margin!=null?p._margin:0;
+    var unit=Math.round(sellPrice(cost,margin)*100)/100;
+    var line=Math.round(unit*qty*100)/100;
+    total+=line;if(p.sku)skus.push(p.sku);
+    return{title:p.title,vendor:vendorOf(p),condition:p.condition||'',sku:p.sku||'',
+      qty:qty,cost:cost,margin_pct:margin,unit_price:unit,line_total:line,
+      description:(p.description||'').trim(),image:p.thumbnail||'',url:p.url||''};
+  });
+  total=Math.round(total*100)/100;
+  var payload={
+    quote_number:h.qNumber,prepared_by:h.qPreparedBy,quote_date:h.qDate,project_reference:h.qProjectRef,
+    customer:{name:h.qCustName,email:h.qCustEmail,company:h.qCustCompany,address:h.qCustAddr},
+    delivery:{address:h.qDelivAddr||h.qCustAddr,week:h.qDelivWeek,skus:skus.join(', ')},
+    line_items:items,materials_total:total,subtotal:total,currency:'GBP'
+  };
+  var out=document.getElementById('qJsonOut');
+  out.value=JSON.stringify(payload,null,2);
+  out.classList.remove('hidden');
+  document.getElementById('qCopyBtn').disabled=false;
+  toast('Quote JSON ready ('+items.length+' lines, £'+total.toFixed(2)+')');
+}
+function copyQuoteJSON(){
+  var out=document.getElementById('qJsonOut');if(!out.value){genQuoteJSON();}
+  out.classList.remove('hidden');out.select();
+  navigator.clipboard.writeText(out.value).then(function(){toast('Copied — paste into the Google Doc Build Quote menu');},function(){document.execCommand('copy');toast('Copied');});
+}
+
+// Patch renderTable to update title + selection count
 var _origRender=renderTable;
-renderTable=function(isNew){_origRender(isNew);updateTitle();};
+renderTable=function(isNew){_origRender(isNew);updateTitle();updateSelCount();};
 
 renderTable();
 updateTitle();
+updateSelCount();
 </script>
 </body>
 </html>
