@@ -6,18 +6,18 @@
 <title>Vendor Scraper</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0f1117;--surface:#1a1d27;--surface2:#242836;--border:#2e3345;--text:#e4e6ef;--dim:#8b8fa3;--accent:#6c72ff;--accent-glow:rgba(108,114,255,0.15);--green:#34d399;--green-glow:rgba(52,211,153,0.12);--orange:#fb923c;--red:#f87171;--radius:10px}
+:root{--bg:#f5f3ec;--surface:#ffffff;--surface2:#faf8f1;--border:#e7e4da;--text:#1a1a1a;--dim:#8a877e;--accent:#F5B800;--accent-strong:#9a7400;--accent-glow:#FBF1CF;--ink:#1a1a1a;--green:#1a7a4a;--green-glow:rgba(26,122,74,0.10);--orange:#b26a00;--red:#b23b3b;--radius:10px}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
 .container{max-width:1100px;margin:0 auto}
 header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;padding-bottom:18px;border-bottom:1px solid var(--border)}
 h1{font-size:21px;font-weight:700}h1 span{color:var(--accent)}
 .hdr-right{display:flex;align-items:center;gap:12px}
-.badge{font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 10px;border-radius:20px;background:var(--accent-glow);color:var(--accent);border:1px solid rgba(108,114,255,0.3)}
+.badge{font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 10px;border-radius:20px;background:var(--accent-glow);color:var(--accent-strong);border:1px solid #F0DFA0}
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px}
 .panel h2{font-size:15px;font-weight:600;margin-bottom:14px}
 .step-row{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
-.step-num{width:24px;height:24px;border-radius:50%;background:var(--accent-glow);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:1px solid rgba(108,114,255,0.3);flex-shrink:0}
+.step-num{width:24px;height:24px;border-radius:50%;background:var(--accent-glow);color:var(--accent-strong);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:1px solid #F0DFA0;flex-shrink:0}
 .step-text{font-size:13px;line-height:1.5}.step-text strong{color:var(--text)}
 .step-text code{font-family:'JetBrains Mono',monospace;background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px;color:var(--green)}
 .config-row{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
@@ -25,8 +25,8 @@ h1{font-size:21px;font-weight:700}h1 span{color:var(--accent)}
 .config-row input:focus{border-color:var(--accent)}
 .config-row select{background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 12px;outline:none;font-family:'DM Sans',sans-serif;cursor:pointer}
 .btn{font-family:'DM Sans',sans-serif;padding:8px 16px;border-radius:7px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s;white-space:nowrap}
-.btn:hover{border-color:var(--accent);color:var(--accent)}
-.btn-primary{background:var(--accent);border-color:var(--accent);color:white}.btn-primary:hover{background:#5a60e6}
+.btn:hover{border-color:var(--accent);color:var(--accent-strong)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--ink)}.btn-primary:hover{background:#E0A800;color:var(--ink)}
 .btn-danger{color:var(--red);border-color:rgba(248,113,113,0.3)}.btn-danger:hover{background:rgba(248,113,113,0.1)}
 .btn:disabled{opacity:0.4;cursor:not-allowed}.btn-sm{padding:6px 12px;font-size:12px}
 .script-box{position:relative;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;max-height:160px;overflow:auto;margin-bottom:10px}
@@ -43,47 +43,58 @@ td{padding:10px 14px;border-top:1px solid var(--border);vertical-align:top}
 td.dsc{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 td.pr{font-family:'JetBrains Mono',monospace;color:var(--green);white-space:nowrap}
 td img{width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
-tr:hover td{background:rgba(108,114,255,0.04)}
+tr:hover td{background:rgba(245,184,0,0.07)}
 .xbtn{background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px}
 .xbtn:hover{color:var(--red);background:rgba(248,113,113,0.1)}
 .empty{text-align:center;padding:50px 20px;color:var(--dim)}
 @keyframes flashIn{0%{background:var(--green-glow)}100%{background:transparent}}
 tr.new-row td{animation:flashIn 1.5s ease-out}
 .toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:1000;transform:translateY(80px);opacity:0;transition:all 0.3s}
-.toast.show{transform:translateY(0);opacity:1}.toast.ok{background:var(--green);color:#0f1117}.toast.err{background:var(--red);color:#0f1117}
+.toast.show{transform:translateY(0);opacity:1}.toast.ok{background:var(--green);color:#fff}.toast.err{background:var(--red);color:#fff}
 .hidden{display:none}
+.mode-tabs{display:inline-flex;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:4px;gap:4px;margin-bottom:22px}
+.mode-tab{border:none;background:none;color:var(--dim);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:8px 18px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:7px}
+.mode-tab.active{background:var(--accent);color:var(--ink)}
+body.mode-scrape .quote-only{display:none!important}
+body.mode-quote .scrape-only{display:none!important}
+body.mode-scrape table th:first-child,body.mode-scrape table td:first-child{display:none}
 </style>
 </head>
-<body>
+<body class="mode-scrape">
 <div class="container">
   <header>
-    <h1>Vendor Scraper &rarr; <span>Medusa CSV</span></h1>
+    <div style="display:flex;align-items:center;gap:14px">
+      <span style="display:inline-flex;gap:6px;align-items:stretch;height:34px">
+        <span style="width:11px;background:var(--accent);display:block"></span>
+        <span style="width:4px;background:var(--accent);display:block"></span>
+      </span>
+      <div>
+        <div style="font-size:20px;font-weight:700;letter-spacing:0.06em;line-height:1">MATERIAL INDEX</div>
+        <div style="font-size:12px;color:var(--dim);letter-spacing:0.02em;margin-top:3px">Vendor scraper</div>
+      </div>
+    </div>
     <div class="hdr-right"><span class="badge">WooCommerce + Shopify + BigCommerce</span></div>
   </header>
 
-  <div class="panel">
-    <h2>Quick Start</h2>
-    <div class="step-row"><div class="step-num">1</div><div class="step-text">Enter a vendor category URL below, click <strong>Generate Script</strong> &mdash; auto-copied to clipboard</div></div>
-    <div class="step-row"><div class="step-num">2</div><div class="step-text">Go to the vendor page, open console (<code>Cmd+Opt+J</code>), paste &amp; run</div></div>
-    <div class="step-row"><div class="step-num">3</div><div class="step-text">When done, click: &nbsp;<a id="bookmarklet" href="#" class="btn btn-sm" style="background:var(--green);color:#fff;cursor:grab;text-decoration:none;padding:4px 12px;font-size:12px;display:inline-block" draggable="true">&#x1F4CB; Copy Products</a>&nbsp; <span style="font-size:11px;color:var(--dim)">(drag to bookmarks bar)</span></div></div>
-    <div class="step-row"><div class="step-num">4</div><div class="step-text">Come back here and <strong>Ctrl/Cmd+V</strong> anywhere &mdash; products auto-import</div></div>
-    <div style="margin-top:8px;padding:8px 12px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--dim)">
-      <strong style="color:#a855f7">&#x26A1; One-click mode:</strong> Drag <a id="runBookmarklet" href="#" class="btn btn-sm" style="background:#a855f7;color:#fff;cursor:grab;text-decoration:none;padding:3px 10px;font-size:11px;display:inline-block" draggable="true">&#x1F680; Scrape Page</a> to your bookmarks bar. Then just click it on any vendor category page &mdash; it auto-scrapes and copies results to clipboard. No console needed.
+  <div class="mode-tabs">
+    <button id="tabScrape" class="mode-tab active" onclick="setMode('scrape')">&#x1F50D; Site scraping</button>
+    <button id="tabQuote" class="mode-tab" onclick="setMode('quote')">&#x1F4C4; Quote building</button>
+  </div>
+
+  <div class="panel scrape-only">
+    <h2>How to scrape</h2>
+    <div style="font-size:13px;line-height:1.6;margin-bottom:14px">
+      <strong>One-click (easiest):</strong> drag <a id="runBookmarklet" href="#" class="btn btn-sm" style="background:var(--accent);color:var(--ink);cursor:grab;text-decoration:none;padding:3px 10px;font-size:11px;display:inline-block" draggable="true">&#x1F680; Scrape Page</a> and <a id="grabBookmarklet" href="#" class="btn btn-sm" style="background:var(--accent);color:var(--ink);cursor:grab;text-decoration:none;padding:3px 10px;font-size:11px;display:inline-block" draggable="true">&#x1F4CC; Grab Product</a> to your bookmarks bar. Click <strong>Scrape Page</strong> on any vendor category page (or <strong>Grab Product</strong> on a single product), then come back and press <strong>Ctrl/Cmd+V</strong> to import.
     </div>
-    <div style="margin-top:8px;padding:8px 12px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--dim)">
-      <strong style="color:var(--orange)">&#x1F4CC; Single product:</strong> Drag <a id="grabBookmarklet" href="#" class="btn btn-sm" style="background:var(--orange);color:#fff;cursor:grab;text-decoration:none;padding:3px 10px;font-size:11px;display:inline-block" draggable="true">&#x1F4CC; Grab Product</a> to your bookmarks bar. Click it on any single product page to extract &amp; copy that one item. Ctrl+V here to add it.
-    </div>
-    <div style="margin-top:8px;padding:8px 12px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--dim)">
-      <strong>Tip:</strong> For multiple categories, generate &amp; paste a script per tab. Each tab's scraper runs independently. Use <strong>📋 Copy Products</strong> in each tab when done, then Ctrl+V here between each.
+    <div style="font-size:12px;color:var(--dim);line-height:1.5;margin-bottom:4px">
+      Or paste a category URL below and <strong>Generate Script</strong> to run it in the browser console (<code>Cmd+Opt+J</code>) &mdash; results auto-copy when done, then Ctrl/Cmd+V here.
     </div>
 
     <div class="config-row" style="margin-top:12px">
       <input type="text" id="urlIn" placeholder="https://vendor-site.co.uk/product-category/...">
-      <select id="maxIn"><option value="5">5 per cat</option><option value="10">10 per cat</option><option value="25">25 per cat</option><option value="50">50 per cat</option><option value="100">100 per cat</option><option value="200">200 per cat</option><option value="9999" selected>All</option></select>
     </div>
     <div class="config-row">
       <button class="btn btn-primary" onclick="gen(false)">Generate Script</button>
-      <button class="btn" onclick="gen(true)" style="border-color:var(--green);color:var(--green)">Full Site Script</button>
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-left:8px;cursor:pointer"><input type="checkbox" id="skipSold" checked> Skip sold/out-of-stock</label>
     </div>
     <div id="scriptArea" class="hidden">
@@ -97,10 +108,9 @@ tr.new-row td{animation:flashIn 1.5s ease-out}
     <div class="tbl-hdr">
       <div><h2>Collected Products</h2><span class="pcount" id="pCount">0 products</span></div>
       <div class="tbl-acts">
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);cursor:pointer"><input type="checkbox" id="skipSold" checked> Skip sold in export</label>
         <button class="btn btn-danger btn-sm" onclick="clearAll()" id="clrBtn" disabled>Clear All</button>
-        <button class="btn btn-sm" onclick="openQuote()" id="quoteBtn" disabled style="border-color:rgba(52,211,153,0.5);color:var(--green)">&#x1F4C4; Build Quote (<span id="selCount">0</span>)</button>
-        <button class="btn btn-primary" onclick="exportCSV()" id="expBtn" disabled>Export Medusa CSV</button>
+        <button class="btn btn-sm quote-only" onclick="openQuote()" id="quoteBtn" disabled style="border-color:rgba(26,122,74,0.4);color:var(--green)">&#x1F4C4; Build Quote (<span id="selCount">0</span>)</button>
+        <button class="btn btn-primary scrape-only" onclick="exportCSV()" id="expBtn" disabled>Export Medusa CSV</button>
       </div>
     </div>
     <div class="table-wrap" style="max-height:500px;overflow-y:auto">
@@ -109,7 +119,7 @@ tr.new-row td{animation:flashIn 1.5s ease-out}
     </div>
   </div>
 
-  <div id="quotePanel" class="panel hidden" style="border-color:rgba(52,211,153,0.4)">
+  <div id="quotePanel" class="panel hidden quote-only" style="border-color:rgba(26,122,74,0.35)">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <h2 style="margin:0">&#x1F4C4; Build Quote</h2>
       <button class="btn btn-sm" onclick="document.getElementById('quotePanel').classList.add('hidden')" style="font-size:11px">Close</button>
@@ -149,7 +159,7 @@ tr.new-row td{animation:flashIn 1.5s ease-out}
       <strong id="qTotal" style="font-size:18px;color:var(--green)">&pound;0.00</strong>
     </div>
     <div class="config-row" style="margin-top:14px;margin-bottom:8px">
-      <input type="text" id="qWebApp" placeholder="Quote Maker web-app URL (ends in /exec) — paste once, it's remembered" onchange="saveWebApp()">
+      <input type="text" id="qWebApp" value="https://script.google.com/a/macros/material-index.co.uk/s/AKfycbz81XRgNv_QpoGcOMmCF3GaF3LzSfXENGMakPbSsSfzlxXqtc0cQKeCsjwBdx2P7sua4Q/exec" placeholder="Quote Maker web-app URL (ends in /exec)" onchange="saveWebApp()">
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="openQuoteMaker()">&#x2197; Open Quote Maker</button>
@@ -161,10 +171,10 @@ tr.new-row td{animation:flashIn 1.5s ease-out}
     <textarea id="qJsonOut" class="hidden" style="width:100%;min-height:120px;margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:10px;padding:10px;resize:vertical;outline:none"></textarea>
   </div>
 
-  <div style="text-align:center;padding:10px 0;font-size:12px;color:var(--dim)">
-    <span style="background:var(--bg);border:1px dashed var(--border);border-radius:6px;padding:6px 16px;display:inline-block"><strong style="color:var(--green)">Ctrl+V</strong> anywhere to import product JSON &nbsp;|&nbsp; <a href="#" onclick="document.getElementById('manualPasteWrap').classList.toggle('hidden');return false" style="color:var(--accent)">manual paste</a></span>
+  <div class="scrape-only" style="text-align:center;padding:10px 0;font-size:12px;color:var(--dim)">
+    <span style="background:var(--surface2);border:1px dashed var(--border);border-radius:6px;padding:6px 16px;display:inline-block"><strong style="color:var(--green)">Ctrl+V</strong> anywhere to import product JSON &nbsp;|&nbsp; <a href="#" onclick="document.getElementById('manualPasteWrap').classList.toggle('hidden');return false" style="color:var(--accent-strong)">manual paste</a></span>
   </div>
-  <div id="manualPasteWrap" class="hidden" style="margin-bottom:12px;padding:0 20px">
+  <div id="manualPasteWrap" class="hidden scrape-only" style="margin-bottom:12px;padding:0 20px">
     <textarea id="pasteArea" style="width:100%;min-height:60px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:10px;resize:vertical;outline:none" placeholder="Paste JSON here..."></textarea>
     <div style="margin-top:6px;display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="manualPaste()">Add Products</button><button class="btn btn-sm" onclick="document.getElementById('manualPasteWrap').classList.add('hidden')" style="font-size:11px">Cancel</button></div>
   </div>
@@ -1094,7 +1104,7 @@ function renderTable(isNew){
 // ── Script Generator (unified) ──
 function gen(fullSite){
   var url=document.getElementById('urlIn').value.trim();if(!url)return;
-  var max=document.getElementById('maxIn').value;
+  var max=9999;
 
   var script='(async function(){\n' + SCRAPER_CORE + '\nvar MAX='+max+';\nvar SKIP_SOLD='+(document.getElementById('skipSold').checked?'true':'false')+';\n';
 
@@ -1526,22 +1536,6 @@ document.addEventListener('paste',function(e){
 });
 
 // ── Bookmarklet generation ──
-function buildCopyBookmarklet(){
-  var code='javascript:void(function(){'+
-    'if(window.__scrapedProducts&&window.__scrapedProducts.length>0){'+
-      'var j=JSON.stringify(window.__scrapedProducts);'+
-      'if(navigator.clipboard&&navigator.clipboard.writeText){'+
-        'navigator.clipboard.writeText(j).then(function(){'+
-          'alert("Copied "+window.__scrapedProducts.length+" products to clipboard! Go to Scraper Tool and Ctrl+V.");'+
-        '}).catch(function(){prompt("Copy this JSON:",j);});'+
-      '}else{prompt("Copy this JSON (Ctrl+A, Ctrl+C):",j);}'+
-    '}else{'+
-      'alert("No scraped products found.\\n\\nRun the scraper script first.");'+
-    '}'+
-  '}())';
-  return code;
-}
-
 function buildRunBookmarklet(){
   // Loads scraper.js from the GitHub repo and executes it on the current page
   var jsUrl='https://livdaw.github.io/vendor-scraper/scraper.js';
@@ -1568,7 +1562,6 @@ function buildGrabBookmarklet(){
 }
 
 // Set bookmarklet hrefs
-try{document.getElementById('bookmarklet').href=buildCopyBookmarklet();}catch(e){}
 try{document.getElementById('runBookmarklet').href=buildRunBookmarklet();}catch(e){}
 try{document.getElementById('grabBookmarklet').href=buildGrabBookmarklet();}catch(e){}
 
@@ -1576,6 +1569,19 @@ try{document.getElementById('grabBookmarklet').href=buildGrabBookmarklet();}catc
 function updateTitle(){
   var n=products.length;
   document.title=n?'('+n+') Vendor Scraper':'Vendor Scraper';
+}
+
+// ══════════════════════════════════════════
+// MODE TOGGLE (Site scraping / Quote building)
+// ══════════════════════════════════════════
+function setMode(m){
+  var quote=m==='quote';
+  document.body.classList.toggle('mode-quote',quote);
+  document.body.classList.toggle('mode-scrape',!quote);
+  document.getElementById('tabScrape').classList.toggle('active',!quote);
+  document.getElementById('tabQuote').classList.toggle('active',quote);
+  if(!quote){var qp=document.getElementById('quotePanel');if(qp)qp.classList.add('hidden');}
+  try{localStorage.setItem('toolMode',m);}catch(e){}
 }
 
 // ══════════════════════════════════════════
@@ -1612,7 +1618,6 @@ function openQuote(){
   ['qNumber','qPreparedBy','qDate','qProjectRef','qCustName','qCustEmail','qCustCompany','qCustAddr','qDelivAddr','qDelivWeek'].forEach(function(id){
     if(hdr[id]!=null)document.getElementById(id).value=hdr[id];
   });
-  var wa=localStorage.getItem('qWebApp');if(wa)document.getElementById('qWebApp').value=wa;
   document.getElementById('quotePanel').classList.remove('hidden');
   renderQuoteLines();
   document.getElementById('quotePanel').scrollIntoView({behavior:'smooth'});
@@ -1747,6 +1752,7 @@ renderTable=function(isNew){_origRender(isNew);updateTitle();updateSelCount();};
 renderTable();
 updateTitle();
 updateSelCount();
+try{setMode(localStorage.getItem('toolMode')||'scrape');}catch(e){setMode('scrape');}
 </script>
 </body>
 </html>
