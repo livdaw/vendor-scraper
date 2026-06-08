@@ -98,17 +98,9 @@ tr.new-row td{animation:flashIn 1.5s ease-out}
       <div><h2>Collected Products</h2><span class="pcount" id="pCount">0 products</span></div>
       <div class="tbl-acts">
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);cursor:pointer"><input type="checkbox" id="skipSold" checked> Skip sold in export</label>
-        <button class="btn btn-sm" onclick="aiRewrite()" id="aiBtn" disabled style="border-color:rgba(168,85,247,0.4);color:#a855f7">&#x2728; AI Rewrite</button>
-        <button class="btn btn-sm" onclick="showApiKeyInput()" id="aiKeyBtn" style="border-color:rgba(168,85,247,0.2);color:var(--dim);font-size:11px">&#x1F511;</button>
         <button class="btn btn-danger btn-sm" onclick="clearAll()" id="clrBtn" disabled>Clear All</button>
         <button class="btn btn-sm" onclick="openQuote()" id="quoteBtn" disabled style="border-color:rgba(52,211,153,0.5);color:var(--green)">&#x1F4C4; Build Quote (<span id="selCount">0</span>)</button>
         <button class="btn btn-primary" onclick="exportCSV()" id="expBtn" disabled>Export Medusa CSV</button>
-      </div>
-    </div>
-    <div id="aiProgress" class="hidden" style="padding:10px 20px;border-bottom:1px solid var(--border);background:var(--bg)">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="flex:1;background:var(--surface2);border-radius:6px;height:6px;overflow:hidden"><div id="aiBar" style="height:100%;background:#a855f7;width:0%;transition:width 0.3s"></div></div>
-        <span id="aiStatus" style="font-size:12px;color:var(--dim);white-space:nowrap">0/0</span>
       </div>
     </div>
     <div class="table-wrap" style="max-height:500px;overflow-y:auto">
@@ -156,11 +148,16 @@ tr.new-row td{animation:flashIn 1.5s ease-out}
       <span style="color:var(--dim)">Materials total (ex VAT):</span>
       <strong id="qTotal" style="font-size:18px;color:var(--green)">&pound;0.00</strong>
     </div>
-    <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="btn btn-primary" onclick="genQuoteJSON()">Generate Quote JSON</button>
-      <button class="btn btn-sm" onclick="copyQuoteJSON()" id="qCopyBtn" disabled>Copy JSON</button>
-      <span style="font-size:11px;color:var(--dim);align-self:center">Paste this into the <strong>Build Quote</strong> menu in your Google Doc template.</span>
+    <div class="config-row" style="margin-top:14px;margin-bottom:8px">
+      <input type="text" id="qWebApp" placeholder="Quote Maker web-app URL (ends in /exec) — paste once, it's remembered" onchange="saveWebApp()">
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="openQuoteMaker()">&#x2197; Open Quote Maker</button>
+      <button class="btn btn-sm" onclick="genQuoteJSON()">Generate JSON</button>
+      <button class="btn btn-sm" onclick="copyQuoteJSON()" id="qCopyBtn" disabled>Copy JSON</button>
+      <span style="font-size:11px;color:var(--dim);align-self:center">Open Quote Maker builds the quote and sends the link back here.</span>
+    </div>
+    <div id="qResult" style="margin-top:10px;font-size:13px;color:var(--green)"></div>
     <textarea id="qJsonOut" class="hidden" style="width:100%;min-height:120px;margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:10px;padding:10px;resize:vertical;outline:none"></textarea>
   </div>
 
@@ -1083,14 +1080,13 @@ function renderTable(isNew){
   document.getElementById('pCount').textContent=products.length+' product'+(products.length!==1?'s':'');
   document.getElementById('expBtn').disabled=!products.length;
   document.getElementById('clrBtn').disabled=!products.length;
-  document.getElementById('aiBtn').disabled=!products.length;
   if(!products.length){tb.innerHTML='';em.style.display='block';return;}
   em.style.display='none';
   tb.innerHTML=products.map(function(p,i){
     var src=p.thumbnail?esc(p.thumbnail):'';
     var cat=p.vendorCategory||'';
     var isSold=!p.quantity||p.quantity===0||p.quantity==='0';
-    return '<tr class="'+(isNew&&i===products.length-1?'new-row':'')+(isSold?' sold-row':'')+'" style="'+(isSold?'opacity:0.5':'')+'"><td style="text-align:center"><input type="checkbox" onchange="toggleSel('+i+',this.checked)" '+(p._sel?'checked':'')+' title="Add to quote"></td><td><button class="xbtn" onclick="removeProduct('+i+')">x</button></td><td>'+(src?'<img src="'+src+'" onerror="this.style.display=\'none\'">':'')+'</td><td><strong>'+esc(p.title)+'</strong></td><td class="pr">&pound;'+parseFloat(p.price||0).toFixed(2)+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:'+(isSold?'var(--red)':'var(--text)')+'">'+(isSold?'SOLD':(p.quantity||0))+'</td><td style="font-size:11px;color:var(--dim)">'+esc(cat)+'</td><td class="dsc">'+(p._aiRewritten?'<span style="color:#a855f7;font-size:10px">&#x2728;</span> ':'')+esc((p.description||'').substring(0,80))+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+esc(p.sku||'')+'</td></tr>';
+    return '<tr class="'+(isNew&&i===products.length-1?'new-row':'')+(isSold?' sold-row':'')+'" style="'+(isSold?'opacity:0.5':'')+'"><td style="text-align:center"><input type="checkbox" onchange="toggleSel('+i+',this.checked)" '+(p._sel?'checked':'')+' title="Add to quote"></td><td><button class="xbtn" onclick="removeProduct('+i+')">x</button></td><td>'+(src?'<img src="'+src+'" onerror="this.style.display=\'none\'">':'')+'</td><td><strong>'+esc(p.title)+'</strong></td><td class="pr">&pound;'+parseFloat(p.price||0).toFixed(2)+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:'+(isSold?'var(--red)':'var(--text)')+'">'+(isSold?'SOLD':(p.quantity||0))+'</td><td style="font-size:11px;color:var(--dim)">'+esc(cat)+'</td><td class="dsc">'+esc((p.description||'').substring(0,80))+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+esc(p.sku||'')+'</td></tr>';
   }).join('');
   if(isNew){var w=tb.closest('.table-wrap');if(w)w.scrollTop=w.scrollHeight;}
 }
@@ -1502,125 +1498,6 @@ function basicCleanup(p){
   return p;
 }
 
-// ── AI API Key management ──
-function showApiKeyInput(){
-  var current=localStorage.getItem('anthropic_api_key')||'';
-  var key=prompt('Enter your Anthropic API key (starts with sk-ant-):\n\nThis is stored locally in your browser and never sent anywhere except the Anthropic API.\n\nLeave blank to clear.',current);
-  if(key===null)return; // cancelled
-  if(key.trim()){
-    localStorage.setItem('anthropic_api_key',key.trim());
-    toast('API key saved!');
-    document.getElementById('aiKeyBtn').style.color='#a855f7';
-  }else{
-    localStorage.removeItem('anthropic_api_key');
-    toast('API key cleared');
-    document.getElementById('aiKeyBtn').style.color='var(--dim)';
-  }
-}
-// Indicate if key is set
-try{if(localStorage.getItem('anthropic_api_key'))document.getElementById('aiKeyBtn').style.color='#a855f7';}catch(e){}
-
-// ── AI Rewrite (calls Claude API) ──
-async function aiRewrite(){
-  var apiKey=localStorage.getItem('anthropic_api_key');
-  if(!apiKey){
-    showApiKeyInput();
-    apiKey=localStorage.getItem('anthropic_api_key');
-    if(!apiKey)return;
-  }
-  if(!products.length)return;
-  var btn=document.getElementById('aiBtn');
-  var prog=document.getElementById('aiProgress');
-  var bar=document.getElementById('aiBar');
-  var status=document.getElementById('aiStatus');
-  btn.disabled=true;btn.textContent='Rewriting...';
-  prog.classList.remove('hidden');
-  var total=products.length;var done=0;var errors=0;
-
-  for(var i=0;i<products.length;i++){
-    var p=products[i];
-    if(p._aiRewritten)continue;
-    if(!p.description&&!p.title)continue;
-
-    try{
-      var cat=guessCategory(p);
-      var mfr=guessManufacturer(p);
-      var cond=guessCondition(p);
-
-      // Determine product domain for adaptive prompting
-      var domain='general';
-      var catLower=(cat+' '+p.vendorCategory+' '+(p.title||'')).toLowerCase();
-      if(catLower.match(/washing|dryer|dishwasher|laundry|tumble|washer/))domain='appliance';
-      else if(catLower.match(/fridge|freezer|cooler|refriger|cooling/))domain='appliance';
-      else if(catLower.match(/oven|cooker|hob|hood|microwave|range/))domain='appliance';
-      else if(catLower.match(/chair|desk|table|storage|cabinet|pedestal|screen|booth|pod|sofa/))domain='furniture';
-      else if(catLower.match(/brick|tile|slate|stone|paving|timber|beam|sleeper|roofing|fence|reclaim/))domain='building-materials';
-
-      var styleGuide='';
-      if(domain==='appliance'){
-        styleGuide='Write for refurbished kitchen/laundry appliances. Include key specs (capacity, spin speed, energy rating, dimensions if known). Mention notable features (frost-free, inverter motor, smart connectivity, steam function, etc). End with a quality assurance line about the refurbished condition.';
-      }else if(domain==='furniture'){
-        styleGuide='Write for used/refurbished office furniture. Mention the manufacturer/designer brand if known. Describe materials, finish, colour, and key adjustable features. Note condition and suitability (e.g. ergonomic, conference use, reception). Keep a professional tone.';
-      }else if(domain==='building-materials'){
-        styleGuide='Write for reclaimed or new building materials. Mention material type, dimensions/sizes if known, quantity/pack size, and suitable applications (e.g. garden walls, paving, roofing). Note whether reclaimed or new. Keep descriptions practical and trade-focused.';
-      }else{
-        styleGuide='Write a clear, professional product description. Include key specifications, materials, and condition. Keep it factual and useful for buyers.';
-      }
-
-      var prompt='Rewrite this product description in 2-3 sentences. Do NOT copy the original wording - write entirely new text.\n\n'+styleGuide+'\n\nProduct title: '+p.title+'\nBrand/Manufacturer: '+(mfr||'Unknown')+'\nCondition: '+(cond||'Used')+'\nCategory: '+(p.vendorCategory||cat||'General')+'\nOriginal description: '+(p.description||'No description available')+'\n\nRespond with ONLY the new description, no quotes, no preamble.';
-
-      var resp=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'x-api-key':apiKey,
-          'anthropic-version':'2023-06-01',
-          'anthropic-dangerous-direct-browser-access':'true'
-        },
-        body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',
-          max_tokens:300,
-          messages:[{role:'user',content:prompt}]
-        })
-      });
-
-      if(resp.ok){
-        var data=await resp.json();
-        var newDesc=(data.content||[]).map(function(c){return c.text||'';}).join('').trim();
-        if(newDesc&&newDesc.length>20){
-          p._origDescription=p.description;
-          p.description=newDesc;
-          p._aiRewritten=true;
-        }
-      }else{
-        errors++;
-        var errData=await resp.json().catch(function(){return {};});
-        var errMsg=errData.error&&errData.error.message||resp.status;
-        console.log('AI rewrite error for "'+p.title+'":',errMsg);
-        if(resp.status===401){toast('Invalid API key','err');break;}
-        if(resp.status===429){
-          console.log('Rate limited, waiting 10s...');
-          await new Promise(function(r){setTimeout(r,10000);});
-          i--; errors--; continue; // retry
-        }
-      }
-    }catch(e){
-      errors++;
-      console.log('AI rewrite failed for "'+p.title+'":',e.message);
-    }
-
-    done++;
-    bar.style.width=(done/total*100)+'%';
-    status.textContent=done+'/'+total+(errors?' ('+errors+' errors)':'');
-    save();
-    renderTable();
-    await new Promise(function(r){setTimeout(r,300);});
-  }
-
-  btn.disabled=false;btn.textContent='\u2728 AI Rewrite';
-  toast('Rewrote '+(done-errors)+' descriptions'+(errors?' ('+errors+' errors)':'')+'!');
-  setTimeout(function(){prog.classList.add('hidden');},3000);
-}
 
 // ── Auto-paste: Ctrl+V anywhere imports JSON ──
 document.addEventListener('paste',function(e){
@@ -1735,6 +1612,7 @@ function openQuote(){
   ['qNumber','qPreparedBy','qDate','qProjectRef','qCustName','qCustEmail','qCustCompany','qCustAddr','qDelivAddr','qDelivWeek'].forEach(function(id){
     if(hdr[id]!=null)document.getElementById(id).value=hdr[id];
   });
+  var wa=localStorage.getItem('qWebApp');if(wa)document.getElementById('qWebApp').value=wa;
   document.getElementById('quotePanel').classList.remove('hidden');
   renderQuoteLines();
   document.getElementById('quotePanel').scrollIntoView({behavior:'smooth'});
@@ -1793,9 +1671,12 @@ function genQuoteJSON(){
     var unit=Math.round(sellPrice(cost,margin)*100)/100;
     var line=Math.round(unit*qty*100)/100;
     total+=line;if(p.sku)skus.push(p.sku);
+    var dims='';
+    if(p.dimensions&&typeof p.dimensions==='object'){var parts=[];for(var k in p.dimensions){if(p.dimensions[k])parts.push(p.dimensions[k]);}dims=parts.join(' x ');}
+    else if(typeof p.dimensions==='string'){dims=p.dimensions;}
     return{title:p.title,vendor:vendorOf(p),condition:p.condition||'',sku:p.sku||'',
-      qty:qty,cost:cost,margin_pct:margin,unit_price:unit,line_total:line,
-      description:(p.description||'').trim(),image:p.thumbnail||'',url:p.url||''};
+      qty:qty,cost:cost,margin_pct:margin,unit_price:unit,line_total:line,dimensions:dims,
+      description:cleanQuoteDesc(p.description),image:p.thumbnail||'',url:p.url||''};
   });
   total=Math.round(total*100)/100;
   var payload={
@@ -1813,7 +1694,50 @@ function genQuoteJSON(){
 function copyQuoteJSON(){
   var out=document.getElementById('qJsonOut');if(!out.value){genQuoteJSON();}
   out.classList.remove('hidden');out.select();
-  navigator.clipboard.writeText(out.value).then(function(){toast('Copied — paste into the Google Doc Build Quote menu');},function(){document.execCommand('copy');toast('Copied');});
+  navigator.clipboard.writeText(out.value).then(function(){toast('Copied — paste into the Quote Maker');},function(){document.execCommand('copy');toast('Copied');});
+}
+// Tidy a scraped description for the quote: fix joined words, collapse whitespace,
+// truncate cleanly at a word boundary. (Letters dropped during scraping can't be
+// recovered here — re-scrape or edit the description manually for those.)
+function cleanQuoteDesc(s){
+  if(!s)return'';
+  s=String(s).replace(/\r/g,'');
+  s=s.replace(/\n+/g,'. ');                 // line breaks -> sentence breaks
+  s=s.replace(/([a-z])([A-Z])/g,'$1 $2');   // splitJoinedWords -> split Joined Words
+  s=s.replace(/([.,;:])([A-Za-z])/g,'$1 $2'); // missing space after punctuation
+  s=s.replace(/\s{2,}/g,' ');               // collapse runs of whitespace
+  s=s.replace(/\s+([.,;:])/g,'$1');         // no space before punctuation
+  s=s.replace(/\.(\s*\.)+/g,'.');           // de-dupe periods
+  s=s.trim();
+  if(s.length>420){s=s.slice(0,420).replace(/\s+\S*$/,'').replace(/[.,;:]+$/,'')+'…';}
+  return s;
+}
+function saveWebApp(){localStorage.setItem('qWebApp',document.getElementById('qWebApp').value.trim());}
+// Receive the finished quote link back from the Quote Maker window.
+window.addEventListener('message',function(ev){
+  var d=ev.data;
+  if(d&&d.type==='quoteCreated'&&d.url){
+    var r=document.getElementById('qResult');
+    if(r)r.innerHTML='&#x2714; Quote created: <a href="'+d.url+'" target="_blank" style="color:var(--accent)">'+esc(d.name||'Open quote')+'</a>';
+    toast('Quote created ✔');
+  }
+});
+function openQuoteMaker(){
+  var url=document.getElementById('qWebApp').value.trim();
+  if(!url){toast('Paste your Quote Maker web-app URL first','err');return;}
+  saveWebApp();
+  genQuoteJSON();
+  var json=document.getElementById('qJsonOut').value;
+  // POST the JSON in the request body — no URL length limit, no copy-paste.
+  window.open('','quoteMaker');               // open target window on the user click (avoids popup block)
+  var f=document.createElement('form');
+  f.method='POST';f.action=url;f.target='quoteMaker';f.style.display='none';
+  var inp=document.createElement('input');
+  inp.type='hidden';inp.name='json';inp.value=json;
+  f.appendChild(inp);document.body.appendChild(f);
+  f.submit();
+  setTimeout(function(){document.body.removeChild(f);},2000);
+  toast('Opening Quote Maker with your quote');
 }
 
 // Patch renderTable to update title + selection count
