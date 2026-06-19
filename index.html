@@ -102,6 +102,15 @@ body.mode-scrape table th:first-child,body.mode-scrape table td:first-child{disp
     </div>
   </div>
 
+  <div class="panel scrape-only">
+    <h2>Add a Material Index product</h2>
+    <div style="font-size:12px;color:var(--dim);line-height:1.5;margin-bottom:10px">Paste one of your own product URLs &mdash; it's pulled straight from your catalogue (price, SKU, condition, dimensions, image), no scraping needed.</div>
+    <div class="config-row">
+      <input type="text" id="miUrl" placeholder="https://material-index.co.uk/products/..." onkeydown="if(event.key==='Enter')addMiProduct()">
+      <button class="btn btn-primary" onclick="addMiProduct()">Add product</button>
+    </div>
+  </div>
+
 
 
   <div class="tbl-section">
@@ -122,8 +131,12 @@ body.mode-scrape table th:first-child,body.mode-scrape table td:first-child{disp
   <div id="quotePanel" class="panel hidden quote-only" style="border-color:rgba(26,122,74,0.35)">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <h2 style="margin:0">&#x1F4C4; Build Quote</h2>
-      <button class="btn btn-sm" onclick="document.getElementById('quotePanel').classList.add('hidden')" style="font-size:11px">Close</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="saveDraft()" style="font-size:11px;border-color:rgba(245,184,0,0.6);color:var(--accent-strong)">&#x1F4BE; Save draft</button>
+        <button class="btn btn-sm" onclick="document.getElementById('quotePanel').classList.add('hidden')" style="font-size:11px">Close</button>
+      </div>
     </div>
+    <div id="draftsBar" style="margin-bottom:14px"></div>
     <div class="config-row" style="margin-bottom:8px">
       <input type="text" id="qNumber" placeholder="Quote number (e.g. MI-2026-014)">
       <input type="text" id="qPreparedBy" placeholder="Prepared by">
@@ -1572,6 +1585,59 @@ function updateTitle(){
 }
 
 // ══════════════════════════════════════════
+// MATERIAL INDEX — fetch a single product from the Medusa Store API
+// ══════════════════════════════════════════
+var MI_API='https://admin.material-index.exchange';
+var MI_PK='pk_6d7c4f6ed5eba8864ddd648d8de29df48d194c5b30cd48234cca695090f03ea8';
+var MI_REGION='reg_01K2ETFHVXMXWYA77JRWPK37WP';
+async function addMiProduct(){
+  var input=document.getElementById('miUrl');
+  var url=input.value.trim();
+  if(!url){toast('Paste a Material Index product URL','err');return;}
+  var m=url.match(/\/products\/([^\/?#]+)/);
+  if(!m){toast("That doesn't look like a /products/ URL",'err');return;}
+  var handle=m[1];
+  toast('Fetching '+handle+'…');
+  try{
+    var fields=encodeURIComponent('*variants.calculated_price,*variants.prices,*categories,*images');
+    var api=MI_API+'/store/products?handle='+encodeURIComponent(handle)+'&region_id='+MI_REGION+'&fields='+fields;
+    var resp=await fetch(api,{headers:{'x-publishable-api-key':MI_PK}});
+    if(!resp.ok){toast('MI API error '+resp.status,'err');console.log('MI API',resp.status,await resp.text());return;}
+    var data=await resp.json();
+    var prod=data.products&&data.products[0];
+    if(!prod){toast('No product found for '+handle,'err');return;}
+    var p=shapeMiProduct(prod,url);
+    if(products.some(function(x){return x.url===p.url;})){toast('Already added','err');return;}
+    products.push(p);save();renderTable(true);
+    input.value='';
+    toast('Added: '+p.title+' (£'+(p.price||0)+')');
+  }catch(e){
+    toast('Fetch blocked — likely CORS. See console.','err');
+    console.log('MI fetch error:',e);
+  }
+}
+function shapeMiProduct(p,url){
+  var price=0;
+  if(p.variants&&p.variants.length){
+    var v=p.variants[0];
+    if(v.calculated_price&&v.calculated_price.calculated_amount!=null)price=parseFloat(v.calculated_price.calculated_amount);
+    else if(v.prices&&v.prices.length)price=parseFloat(v.prices[0].amount);
+  }
+  var dims='';
+  if(p.width||p.height||p.length){var a=[];if(p.width)a.push(p.width+'w');if(p.height)a.push(p.height+'h');if(p.length)a.push(p.length+'d');dims=a.join(' x ')+' mm';}
+  else if(p.metadata&&p.metadata.dimensions)dims=p.metadata.dimensions;
+  var condition=p.metadata?(p.metadata.condition||p.metadata.grade||''):'';
+  var sku=(p.variants&&p.variants[0]&&p.variants[0].sku)||'';
+  var images=[];
+  if(p.images&&p.images.length)images=p.images.slice().sort(function(a,b){return (a.rank||0)-(b.rank||0);}).map(function(i){return i.url;}).filter(Boolean);
+  if(!images.length&&p.thumbnail)images=[p.thumbnail];
+  return{title:p.title||'',description:p.description||'',price:price||0,sku:sku,
+    dimensions:dims,condition:condition,thumbnail:p.thumbnail||images[0]||'',images:images,
+    url:url,quantity:1,vendor:'Material Index',
+    vendorCategory:(p.categories&&p.categories[0]&&p.categories[0].name)||''};
+}
+
+// ══════════════════════════════════════════
 // MODE TOGGLE (Site scraping / Quote building)
 // ══════════════════════════════════════════
 function setMode(m){
@@ -1620,7 +1686,67 @@ function openQuote(){
   });
   document.getElementById('quotePanel').classList.remove('hidden');
   renderQuoteLines();
+  renderDrafts();
   document.getElementById('quotePanel').scrollIntoView({behavior:'smooth'});
+}
+
+// ── Saved quote drafts (browser-local) ──
+function getDrafts(){try{return JSON.parse(localStorage.getItem('qDrafts')||'[]');}catch(e){return [];}}
+function putDrafts(d){localStorage.setItem('qDrafts',JSON.stringify(d));}
+function saveDraft(){
+  var sel=selectedProducts();
+  if(!sel.length){toast('Nothing to save — tick some products','err');return;}
+  var hdr=quoteHeader();
+  var def=(hdr.qNumber||hdr.qCustName||('Draft '+new Date().toLocaleDateString('en-GB')));
+  var name=prompt('Name this draft:',def);
+  if(name===null)return;
+  name=name.trim()||def;
+  var snapshot=sel.map(function(p){return JSON.parse(JSON.stringify(p));}); // deep copy incl _qty/_margin/_sel
+  var drafts=getDrafts();
+  var existing=drafts.filter(function(d){return d.name===name;})[0];
+  var rec={id:existing?existing.id:('d'+Date.now()),name:name,savedAt:Date.now(),header:hdr,items:snapshot};
+  if(existing){drafts=drafts.map(function(d){return d.id===existing.id?rec:d;});}
+  else{drafts.unshift(rec);}
+  putDrafts(drafts);renderDrafts();
+  toast('Draft saved: '+name);
+}
+function loadDraft(id){
+  var d=getDrafts().filter(function(x){return x.id===id;})[0];
+  if(!d)return;
+  // restore header fields
+  var h=d.header||{};
+  ['qNumber','qPreparedBy','qDate','qProjectRef','qCustName','qCustEmail','qCustCompany','qCustAddr','qDelivAddr','qDelivWeek'].forEach(function(id2){
+    var el=document.getElementById(id2);if(el)el.value=h[id2]||'';
+  });
+  localStorage.setItem('qHdr',JSON.stringify(h));
+  // restore line items into the catalogue (merge by url||sku), marked selected
+  (d.items||[]).forEach(function(it){
+    var key=it.url||it.sku;
+    var ex=products.filter(function(p){return (p.url||p.sku)===key;})[0];
+    if(ex){ex._sel=true;ex._qty=it._qty;ex._margin=it._margin;}
+    else{products.push(it);}
+  });
+  save();renderTable();updateSelCount();renderQuoteLines();
+  toast('Loaded draft: '+d.name);
+}
+function deleteDraft(id){
+  var drafts=getDrafts();var d=drafts.filter(function(x){return x.id===id;})[0];
+  if(d&&!confirm('Delete draft "'+d.name+'"?'))return;
+  putDrafts(drafts.filter(function(x){return x.id!==id;}));renderDrafts();
+}
+function renderDrafts(){
+  var bar=document.getElementById('draftsBar');if(!bar)return;
+  var drafts=getDrafts();
+  if(!drafts.length){bar.innerHTML='<div style="font-size:11px;color:var(--dim)">No saved drafts yet. Use &#x1F4BE; Save draft to keep this quote.</div>';return;}
+  bar.innerHTML='<div style="font-size:11px;color:var(--dim);margin-bottom:6px">Saved drafts</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px">'+drafts.map(function(d){
+      var n=(d.items||[]).length;
+      return '<span style="display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 8px;font-size:12px">'+
+        '<a href="#" onclick="loadDraft(\''+d.id+'\');return false" style="color:var(--accent-strong);text-decoration:none" title="Load draft">'+esc(d.name)+'</a>'+
+        '<span style="color:var(--dim);font-size:10px">'+n+' item'+(n!==1?'s':'')+'</span>'+
+        '<button class="xbtn" onclick="deleteDraft(\''+d.id+'\')" title="Delete">x</button>'+
+        '</span>';
+    }).join('')+'</div>';
 }
 function applyDefMargin(){
   var m=parseFloat(document.getElementById('qDefMargin').value)||0;
@@ -1701,20 +1827,46 @@ function copyQuoteJSON(){
   out.classList.remove('hidden');out.select();
   navigator.clipboard.writeText(out.value).then(function(){toast('Copied — paste into the Quote Maker');},function(){document.execCommand('copy');toast('Copied');});
 }
-// Tidy a scraped description for the quote: fix joined words, collapse whitespace,
-// truncate cleanly at a word boundary. (Letters dropped during scraping can't be
-// recovered here — re-scrape or edit the description manually for those.)
+// Normalise a scraped description into a consistent, quote-ready summary:
+// fix joined words, strip marketing fluff/headings, de-shout caps, tidy
+// punctuation, and cap to ~3 sentences / 260 chars. (Letters dropped during
+// scraping can't be recovered here — re-scrape or edit manually for those.)
 function cleanQuoteDesc(s){
   if(!s)return'';
   s=String(s).replace(/\r/g,'');
-  s=s.replace(/\n+/g,'. ');                 // line breaks -> sentence breaks
-  s=s.replace(/([a-z])([A-Z])/g,'$1 $2');   // splitJoinedWords -> split Joined Words
-  s=s.replace(/([.,;:])([A-Za-z])/g,'$1 $2'); // missing space after punctuation
-  s=s.replace(/\s{2,}/g,' ');               // collapse runs of whitespace
-  s=s.replace(/\s+([.,;:])/g,'$1');         // no space before punctuation
-  s=s.replace(/\.(\s*\.)+/g,'.');           // de-dupe periods
+  s=s.replace(/\n+/g,'. ');                       // line breaks -> sentence breaks
+  s=s.replace(/([a-z])([A-Z])/g,'$1 $2');         // splitJoinedWords -> split Joined Words
+  s=s.replace(/([.,;:])([A-Za-z])/g,'$1 $2');     // missing space after punctuation
+
+  // strip section headings & vendor boilerplate / marketing fluff
+  s=s.replace(/\b(description|features?|specifications?|specs?|details?|overview|condition)\s*:/gi,' ');
+  s=s.replace(/\b(description|features?|specifications?|overview)\b(?=\s+[A-Z0-9])/gi,' '); // heading words w/o colon
+  s=s.replace(/\bRRP\b\s*£?\s*[\d.,]+/gi,' ');                                 // "RRP £175.00"
+  s=s.replace(/\bbuy it now\b[^.]*?(?=\.|$)/gi,' ');
+  s=s.replace(/\b(free\s+)?(installation|delivery|collection)[^.]*?(miles|area|nationwide|postcode|enquire|RG\d)[^.]*?(?=\.|$)/gi,' ');
+  s=s.replace(/\benquire[^.]*?(?=\.|$)/gi,' ');
+  s=s.replace(/\b(special offer|end of line|clearance|while stocks last|order now|shop now)\b/gi,' ');
+  s=s.replace(/\byou are buying\b/gi,' ');
+
+  // de-shout ALL-CAPS runs (3+ letters) e.g. "SAYL" -> "Sayl"
+  s=s.replace(/\b([A-Z]{3,})\b/g,function(w){return w.charAt(0)+w.slice(1).toLowerCase();});
+
+  // tidy whitespace & punctuation
+  s=s.replace(/\s{2,}/g,' ');
+  s=s.replace(/\s+([.,;:])/g,'$1');
+  s=s.replace(/\.(\s*\.)+/g,'.');
+  s=s.replace(/^[\s.,;:-]+/,'');
   s=s.trim();
-  if(s.length>420){s=s.slice(0,420).replace(/\s+\S*$/,'').replace(/[.,;:]+$/,'')+'…';}
+
+  // cap to first 3 sentences
+  var sentences=s.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g)||[s];
+  if(sentences.length>3)s=sentences.slice(0,3).join(' ').trim();
+
+  // hard cap ~260 chars at a word boundary
+  if(s.length>260){s=s.slice(0,260).replace(/\s+\S*$/,'').replace(/[,;:]+$/,'');if(!/[.!?]$/.test(s))s+='…';}
+
+  s=s.replace(/\s{2,}/g,' ').trim();
+  if(s)s=s.charAt(0).toUpperCase()+s.slice(1);   // leading capital
   return s;
 }
 function saveWebApp(){localStorage.setItem('qWebApp',document.getElementById('qWebApp').value.trim());}
