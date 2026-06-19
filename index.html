@@ -1801,11 +1801,12 @@ function genQuoteJSON(){
     var margin=p._margin!=null?p._margin:0;
     var unit=Math.round(sellPrice(cost,margin)*100)/100;
     var line=Math.round(unit*qty*100)/100;
-    total+=line;if(p.sku)skus.push(p.sku);
+    var sku=cleanSku(p.sku);
+    total+=line;if(sku)skus.push(sku);
     var dims='';
     if(p.dimensions&&typeof p.dimensions==='object'){var parts=[];for(var k in p.dimensions){if(p.dimensions[k])parts.push(p.dimensions[k]);}dims=parts.join(' x ');}
     else if(typeof p.dimensions==='string'){dims=p.dimensions;}
-    return{title:p.title,vendor:vendorOf(p),condition:p.condition||'',sku:p.sku||'',
+    return{title:cleanTitleJunk(p.title),vendor:vendorOf(p),condition:p.condition||'',sku:sku,
       qty:qty,cost:cost,margin_pct:margin,unit_price:unit,line_total:line,dimensions:dims,
       description:cleanQuoteDesc(p.description),image:p.thumbnail||'',url:p.url||''};
   });
@@ -1831,6 +1832,20 @@ function copyQuoteJSON(){
 // fix joined words, strip marketing fluff/headings, de-shout caps, tidy
 // punctuation, and cap to ~3 sentences / 260 chars. (Letters dropped during
 // scraping can't be recovered here — re-scrape or edit manually for those.)
+// Drop junk SKUs (scraper sometimes grabs JS fragments like "t+n};return").
+function cleanSku(s){
+  if(!s)return'';
+  s=String(s).trim();
+  if(/[{}();=]|=>|\breturn\b|\bfunction\b|\bvar\b|\bvoid\b/.test(s))return'';
+  if(s.length>40)return'';
+  return s;
+}
+// Strip a leading code fragment that occasionally prefixes a scraped title.
+function cleanTitleJunk(s){
+  if(!s)return'';
+  s=String(s).replace(/^[^A-Za-z0-9£]*?(?:t\+n\};return|\};return|return\b|=>)[^A-Za-z0-9]*/,'').trim();
+  return s;
+}
 function cleanQuoteDesc(s){
   if(!s)return'';
   s=String(s).replace(/\r/g,'');
@@ -1847,6 +1862,15 @@ function cleanQuoteDesc(s){
   s=s.replace(/\benquire[^.]*?(?=\.|$)/gi,' ');
   s=s.replace(/\b(special offer|end of line|clearance|while stocks last|order now|shop now)\b/gi,' ');
   s=s.replace(/\byou are buying\b/gi,' ');
+
+  // strip vendor CTAs / contact lines
+  s=s.replace(/\bcan'?[''`]?t find (what )?(you('|[''`]| a)?re|you want|you[''`]?re looking for)[^.]*/gi,' ');
+  s=s.replace(/\b(we\s+)?(deliver|delivery|shipping)\s+nationwide\b/gi,' ');
+  s=s.replace(/\bnationwide\s+(delivery|shipping)\b/gi,' ');
+  s=s.replace(/\b(call|phone|contact|ring)\s+(us|now|today|the team)[^.]*/gi,' ');
+  s=s.replace(/\b(free\s*phone|freephone|tel|telephone|phone|call|mob|mobile)[:.\s]*\+?\d[\d\s().-]{6,}\d/gi,' ');
+  s=s.replace(/\b0\d[\d\s]{7,}\d\b/g,' ');               // bare UK phone numbers e.g. 0800 6522 809
+  s=s.replace(/\bwe\s+(also\s+)?(deliver|sell|offer|stock|supply)\b[^.]*/gi,' ');
 
   // de-shout ALL-CAPS runs (3+ letters) e.g. "SAYL" -> "Sayl"
   s=s.replace(/\b([A-Z]{3,})\b/g,function(w){return w.charAt(0)+w.slice(1).toLowerCase();});
