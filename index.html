@@ -113,6 +113,11 @@ body.mode-scrape table th:first-child,body.mode-scrape table td:first-child{disp
 
 
 
+  <div class="panel quote-only" style="margin-bottom:20px">
+    <h2 style="font-size:15px;margin-bottom:10px">Saved quote drafts</h2>
+    <div id="draftsBar"></div>
+  </div>
+
   <div class="tbl-section">
     <div class="tbl-hdr">
       <div><h2>Collected Products</h2><span class="pcount" id="pCount">0 products</span></div>
@@ -123,7 +128,7 @@ body.mode-scrape table th:first-child,body.mode-scrape table td:first-child{disp
       </div>
     </div>
     <div class="table-wrap" style="max-height:500px;overflow-y:auto">
-      <table><thead><tr><th title="Add to quote">&#x1F4C4;</th><th></th><th>Img</th><th>Title</th><th>Price</th><th>Qty</th><th>Cat</th><th>Description</th><th>SKU</th></tr></thead><tbody id="tBody"></tbody></table>
+      <table><thead><tr><th title="Add to quote">&#x1F4C4;</th><th></th><th>Img</th><th>Title</th><th>Price</th><th>Qty</th><th>Cat</th><th>Condition</th><th>Description</th><th>SKU</th></tr></thead><tbody id="tBody"></tbody></table>
       <div class="empty" id="emptyMsg">No products yet.</div>
     </div>
   </div>
@@ -136,28 +141,32 @@ body.mode-scrape table th:first-child,body.mode-scrape table td:first-child{disp
         <button class="btn btn-sm" onclick="document.getElementById('quotePanel').classList.add('hidden')" style="font-size:11px">Close</button>
       </div>
     </div>
-    <div id="draftsBar" style="margin-bottom:14px"></div>
+    <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Quote details</div>
     <div class="config-row" style="margin-bottom:8px">
       <input type="text" id="qNumber" placeholder="Quote number (e.g. MI-2026-014)">
+      <input type="text" id="qProjectRef" placeholder="Project reference">
+    </div>
+    <div class="config-row" style="margin-bottom:16px">
       <input type="text" id="qPreparedBy" placeholder="Prepared by">
       <input type="text" id="qDate" placeholder="Quote date (e.g. 8 June 2026)">
     </div>
+
+    <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Customer details</div>
     <div class="config-row" style="margin-bottom:8px">
-      <input type="text" id="qProjectRef" placeholder="Project reference">
       <input type="text" id="qCustName" placeholder="Customer name">
+      <input type="text" id="qCustCompany" placeholder="Company name">
+    </div>
+    <div class="config-row" style="margin-bottom:16px">
       <input type="text" id="qCustEmail" placeholder="Customer email">
-    </div>
-    <div class="config-row" style="margin-bottom:8px">
-      <input type="text" id="qCustCompany" placeholder="Company">
       <input type="text" id="qCustAddr" placeholder="Customer address">
-      <input type="text" id="qDelivAddr" placeholder="Delivery address (defaults to customer)">
     </div>
-    <div class="config-row" style="margin-bottom:14px;align-items:center">
-      <input type="text" id="qDelivWeek" placeholder="Delivery w/c (e.g. w/c 22 June)" style="flex:1">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <span style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px">Material</span>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);white-space:nowrap">Default margin %
-        <input type="number" id="qDefMargin" value="0" min="0" max="99" step="0.5" style="width:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px" onchange="applyDefMargin()">
+        <input type="number" id="qDefMargin" value="0" min="0" max="99" step="0.5" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px" onchange="applyDefMargin()">
+        <button class="btn btn-sm" onclick="applyDefMargin()" style="font-size:11px">Apply to all</button>
       </label>
-      <button class="btn btn-sm" onclick="applyDefMargin()" style="font-size:11px">Apply to all</button>
     </div>
     <div class="table-wrap" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
       <table style="font-size:12px"><thead><tr>
@@ -167,9 +176,15 @@ body.mode-scrape table th:first-child,body.mode-scrape table td:first-child{disp
         <th style="text-align:right">Line &pound;</th><th></th>
       </tr></thead><tbody id="qBody"></tbody></table>
     </div>
-    <div style="display:flex;justify-content:flex-end;align-items:center;gap:18px;margin-top:12px;font-size:14px">
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:18px;margin-top:12px;margin-bottom:16px;font-size:14px">
       <span style="color:var(--dim)">Materials total (ex VAT):</span>
       <strong id="qTotal" style="font-size:18px;color:var(--green)">&pound;0.00</strong>
+    </div>
+
+    <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Logistics</div>
+    <div class="config-row" style="margin-bottom:6px">
+      <input type="text" id="qDelivAddr" placeholder="All deliveries to (defaults to customer address)">
+      <input type="text" id="qDelivWeek" placeholder="Delivery w/c (e.g. w/c 22 June)">
     </div>
     <div class="config-row" style="margin-top:14px;margin-bottom:8px">
       <input type="text" id="qWebApp" value="https://script.google.com/a/macros/material-index.co.uk/s/AKfycbwFuCIDCfvajyDHV-XsJWPWqSaejt0QBFdX1_hbwxhrlTmIlzNXk2YeOuOsBEwfnOwigg/exec" placeholder="Quote Maker web-app URL (ends in /exec)" onchange="saveWebApp()">
@@ -1097,6 +1112,24 @@ function removeProduct(i){products.splice(i,1);save();renderTable();}
 function clearAll(){if(!confirm('Remove all?'))return;products=[];save();renderTable();}
 function save(){localStorage.setItem('sp',JSON.stringify(products));}
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function escA(s){return esc(s==null?'':s).replace(/"/g,'&quot;');}
+var COND_OPTS=['','Reclaimed: Excellent','Reclaimed: Very Good','Reclaimed: Good','Reclaimed: Fair','Refurbished','Remanufactured','Excess/Never Used','Used: Sold As Seen'];
+function condSelect(i,cur){
+  cur=cur||'';
+  var opts=COND_OPTS.slice();
+  if(cur&&opts.indexOf(cur)<0)opts.push(cur); // keep any non-standard scraped value
+  var html='<select onchange="setField('+i+',\'condition\',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:5px 4px;font-size:11px;max-width:130px">';
+  opts.forEach(function(o){html+='<option value="'+escA(o)+'"'+(o===cur?' selected':'')+'>'+(o?esc(o):'—')+'</option>';});
+  return html+'</select>';
+}
+// In-place edit of a collected-product field (feeds both the quote and the CSV export).
+function setField(i,field,val){
+  if(!products[i])return;
+  if(field==='price'){var n=parseFloat(val)||0;products[i].price=n;if(products[i].variants&&products[i].variants[0])products[i].variants[0].price=n;}
+  else if(field==='quantity'){products[i].quantity=parseInt(val,10)||0;}
+  else{products[i][field]=val;}
+  save();
+}
 
 function renderTable(isNew){
   var tb=document.getElementById('tBody'),em=document.getElementById('emptyMsg');
@@ -1109,7 +1142,19 @@ function renderTable(isNew){
     var src=p.thumbnail?esc(p.thumbnail):'';
     var cat=p.vendorCategory||'';
     var isSold=!p.quantity||p.quantity===0||p.quantity==='0';
-    return '<tr class="'+(isNew&&i===products.length-1?'new-row':'')+(isSold?' sold-row':'')+'" style="'+(isSold?'opacity:0.5':'')+'"><td style="text-align:center"><input type="checkbox" onchange="toggleSel('+i+',this.checked)" '+(p._sel?'checked':'')+' title="Add to quote"></td><td><button class="xbtn" onclick="removeProduct('+i+')">x</button></td><td>'+(src?'<img src="'+src+'" onerror="this.style.display=\'none\'">':'')+'</td><td><strong>'+esc(p.title)+'</strong></td><td class="pr">&pound;'+parseFloat(p.price||0).toFixed(2)+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:'+(isSold?'var(--red)':'var(--text)')+'">'+(isSold?'SOLD':(p.quantity||0))+'</td><td style="font-size:11px;color:var(--dim)">'+esc(cat)+'</td><td class="dsc">'+esc((p.description||'').substring(0,80))+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+esc(p.sku||'')+'</td></tr>';
+    var fld='background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:5px 7px;font-size:12px';
+    return '<tr class="'+(isNew&&i===products.length-1?'new-row':'')+(isSold?' sold-row':'')+'">'
+      +'<td style="text-align:center"><input type="checkbox" onchange="toggleSel('+i+',this.checked)" '+(p._sel?'checked':'')+' title="Add to quote"></td>'
+      +'<td><button class="xbtn" onclick="removeProduct('+i+')">x</button></td>'
+      +'<td>'+(src?'<img src="'+src+'" onerror="this.style.display=\'none\'">':'')+'</td>'
+      +'<td><input value="'+escA(p.title)+'" onchange="setField('+i+',\'title\',this.value)" style="'+fld+';width:100%;min-width:150px;font-weight:600"></td>'
+      +'<td><input type="number" step="0.01" min="0" value="'+parseFloat(p.price||0)+'" onchange="setField('+i+',\'price\',this.value)" style="'+fld+';width:80px;text-align:right"></td>'
+      +'<td><input type="number" min="0" value="'+(parseInt(p.quantity,10)||0)+'" onchange="setField('+i+',\'quantity\',this.value)" style="'+fld+';width:54px;text-align:center"></td>'
+      +'<td><input value="'+escA(cat)+'" onchange="setField('+i+',\'vendorCategory\',this.value)" style="'+fld+';width:104px;font-size:11px"></td>'
+      +'<td>'+condSelect(i,p.condition)+'</td>'
+      +'<td><textarea onchange="setField('+i+',\'description\',this.value)" style="'+fld+';width:100%;min-width:170px;height:40px;font-size:11px;resize:vertical;font-family:inherit">'+esc(p.description||'')+'</textarea></td>'
+      +'<td><input value="'+escA(p.sku||'')+'" onchange="setField('+i+',\'sku\',this.value)" style="'+fld+';width:92px;font-size:11px;font-family:\'JetBrains Mono\',monospace"></td>'
+      +'</tr>';
   }).join('');
   if(isNew){var w=tb.closest('.table-wrap');if(w)w.scrollTop=w.scrollHeight;}
 }
@@ -1647,6 +1692,7 @@ function setMode(m){
   document.getElementById('tabScrape').classList.toggle('active',!quote);
   document.getElementById('tabQuote').classList.toggle('active',quote);
   if(!quote){var qp=document.getElementById('quotePanel');if(qp)qp.classList.add('hidden');}
+  if(quote){try{renderDrafts();}catch(e){}}
   try{localStorage.setItem('toolMode',m);}catch(e){}
 }
 
